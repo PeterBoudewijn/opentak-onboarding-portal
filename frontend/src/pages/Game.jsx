@@ -41,7 +41,10 @@ function Game() {
 
   useEffect(() => {
     loadStatus();
-    const timer = setInterval(() => setTick((value) => value + 1), 30000);
+    const timer = setInterval(() => {
+      setTick((value) => value + 1);
+      loadStatus();
+    }, 30000);
     return () => clearInterval(timer);
   }, []);
 
