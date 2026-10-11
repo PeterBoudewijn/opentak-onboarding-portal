@@ -7,6 +7,15 @@ import secrets
 def _env_bool(name, default='False'):
     return str(environ.get(name, default)).strip().lower() in {'1', 'true', 'yes', 'on'}
 
+
+def _env_csv(name, default=''):
+    return [
+        value.strip()
+        for value in str(environ.get(name, default)).split(',')
+        if value.strip()
+    ]
+
+
 load_dotenv()
 API_KEY = str(environ.get('API_KEY', secrets.token_hex(32)))
 SECRET_KEY=str(environ.get('SECRET_KEY'))
@@ -40,3 +49,8 @@ FRONTEND_URL = str(environ.get('FRONTEND_URL', 'http://localhost:5000'))
 
 # CORS origins for API
 CORS_ORIGINS = str(environ.get('CORS_ORIGINS', '*'))
+
+# OTS usernames that may remain permanently in the reserved airsoft groups.
+# Use comma-separated usernames when more than one permanent account is needed.
+GAME_PERMANENT_USERS_RED = _env_csv('GAME_PERMANENT_USERS_RED')
+GAME_PERMANENT_USERS_BLUE = _env_csv('GAME_PERMANENT_USERS_BLUE')
