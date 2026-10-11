@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Patch OpenTAKServer 1.7.13 for isolated Airsoft game teams.
 
-This patch adds three narrowly-scoped fixes:
+This patch adds four narrowly-scoped fixes:
 
 1. Game team color enforcement
    GameRed  -> outgoing __group name="Red"
@@ -13,12 +13,17 @@ This patch adds three narrowly-scoped fixes:
    authenticated user.
 
 3. Stale per-device queue cleanup on account changes
-   If the same device UID authenticates as a different OTS user, purge the
-   already-queued messages from the previous identity before starting the new
-   consumer. Unbinding alone does not remove messages already in the queue.
+   If the same device UID authenticates as a different OTS user, purge
+   already-queued messages belonging to the previous identity.
 
-The script is idempotent, creates a timestamped backup, and byte-compiles the
-modified EudHandler.py before reporting success.
+4. OTS 1.7.13 disconnect binding bug
+   cot_parser.send_disconnect_cot() logs that it unbound the EUD queue, but
+   actually calls queue_bind(). This can asynchronously resurrect a previous
+   account's group after the device has already logged in with another account.
+   EudHandler owns the binding lifecycle, so cot_parser must not re-bind it.
+
+The script is idempotent, creates timestamped backups, and byte-compiles all
+modified modules before reporting success.
 """
 
 from __future__ import annotations
@@ -34,6 +39,7 @@ MARKER_V1 = "# AIRSOFT_GAME_TEAM_OVERRIDE_V1"
 MARKER_V2 = "# AIRSOFT_GAME_TEAM_OVERRIDE_V2"
 MARKER_V3 = "# AIRSOFT_GAME_TEAM_OVERRIDE_V3"
 MARKER_V4 = "# AIRSOFT_GAME_TEAM_OVERRIDE_V4"
+COT_MARKER = "# AIRSOFT_GAME_DISCONNECT_BIND_FIX_V1"
 
 SETUP_BASE = """    def setup(self):
         self.create_app()
@@ -133,8 +139,6 @@ TEAM_HELPER_V4 = """    # AIRSOFT_GAME_TEAM_OVERRIDE_V4
         if not self.is_ssl or not self.uid or not self.rabbit_channel:
             return
 
-        # parse_device_info() calls this before it updates EUD.user_id, so the
-        # existing row still tells us which account last owned this device UID.
         previous_user_id = None
         existing_eud_row = db.session.execute(
             select(EUD).filter_by(uid=self.uid)
@@ -149,8 +153,6 @@ TEAM_HELPER_V4 = """    # AIRSOFT_GAME_TEAM_OVERRIDE_V4
             and previous_user_id != current_user_id
         )
 
-        # A non-auto-delete UID queue can survive an account/team change.
-        # Remove all group routes before applying the current user's OUT groups.
         groups = db.session.execute(db.session.query(Group)).all()
         routing_keys = {"__ANON__.IN", "__ANON__.OUT"}
 
@@ -167,9 +169,6 @@ TEAM_HELPER_V4 = """    # AIRSOFT_GAME_TEAM_OVERRIDE_V4
                 routing_key=routing_key,
             )
 
-        # Unbinding does not remove messages already routed into the UID queue.
-        # If a different authenticated user now owns this device UID, those
-        # queued messages belong to the previous identity and must not leak.
         if identity_changed:
             self.rabbit_channel.queue_purge(queue=self.uid)
             self.logger.warning(
@@ -210,12 +209,32 @@ BIND_PATCHED = """                        if self.is_ssl:
                             group_memberships = db.session.execute(
 """
 
+COT_BAD_BIND = """                        self.rabbit_channel.queue_bind(
+                            queue=uid,
+                            exchange="groups",
+                            routing_key=f"{group.group.name}.{group.direction}",
+                        )
 
-def locate_target() -> Path:
-    spec = importlib.util.find_spec("opentakserver.eud_handler.EudHandler")
+                        self.logger.debug(
+                            f"Unbound {uid} from {group.group.name}.{group.direction}"
+                        )
+"""
+
+COT_FIXED_BIND = """                        # AIRSOFT_GAME_DISCONNECT_BIND_FIX_V1
+                        # EudHandler owns the UID queue binding lifecycle. An
+                        # asynchronous disconnect must not re-bind an old group
+                        # after the same UID has already logged in elsewhere.
+                        self.logger.debug(
+                            f"Disconnect routed for {uid} in {group.group.name}.{group.direction}"
+                        )
+"""
+
+
+def locate_module(module_name: str) -> Path:
+    spec = importlib.util.find_spec(module_name)
     if spec is None or not spec.origin:
         raise RuntimeError(
-            "Could not locate opentakserver.eud_handler.EudHandler. "
+            f"Could not locate {module_name}. "
             "Run this script with the OpenTAKServer 1.7.13 virtualenv Python."
         )
     return Path(spec.origin).resolve()
@@ -241,14 +260,9 @@ def replace_existing_helper(source: str) -> str:
     return source[:start] + TEAM_HELPER_V4 + source[end:]
 
 
-def main() -> int:
-    target = locate_target()
-    source = target.read_text(encoding="utf-8")
-    print(f"Target: {target}")
-
+def patch_eud_handler(source: str) -> str:
     if MARKER_V4 in source and BIND_PATCHED in source and SETUP_V3 in source:
-        print("V4 patch is already installed; no changes made.")
-        return 0
+        return source
 
     source = source.replace(V1_LATE_INIT, "", 1)
 
@@ -258,7 +272,7 @@ def main() -> int:
         elif SETUP_BASE in source:
             source = source.replace(SETUP_BASE, SETUP_V3, 1)
         else:
-            raise RuntimeError("Expected OTS 1.7.13 setup() pattern not found.")
+            raise RuntimeError("Expected OTS 1.7.13 EudHandler.setup() pattern not found.")
 
     source = replace_existing_helper(source)
 
@@ -272,20 +286,61 @@ def main() -> int:
             raise RuntimeError("Expected OTS 1.7.13 SSL group-binding block not found.")
         source = source.replace(BIND_ANCHOR, BIND_PATCHED, 1)
 
+    return source
+
+
+def patch_cot_parser(source: str) -> str:
+    if COT_MARKER in source:
+        return source
+    if COT_BAD_BIND not in source:
+        raise RuntimeError(
+            "Expected OTS 1.7.13 cot_parser disconnect queue_bind() pattern not found."
+        )
+    return source.replace(COT_BAD_BIND, COT_FIXED_BIND, 1)
+
+
+def main() -> int:
+    eud_target = locate_module("opentakserver.eud_handler.EudHandler")
+    cot_target = locate_module("opentakserver.cot_parser.cot_parser")
+
+    eud_source = eud_target.read_text(encoding="utf-8")
+    cot_source = cot_target.read_text(encoding="utf-8")
+
+    eud_patched = patch_eud_handler(eud_source)
+    cot_patched = patch_cot_parser(cot_source)
+
+    print(f"EudHandler: {eud_target}")
+    print(f"cot_parser:  {cot_target}")
+
+    if eud_patched == eud_source and cot_patched == cot_source:
+        print("V5 patch is already installed; no changes made.")
+        return 0
+
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    backup = target.with_name(target.name + f".bak-airsoft-team-{stamp}")
-    shutil.copy2(target, backup)
+    backups = {}
 
     try:
-        target.write_text(source, encoding="utf-8")
-        py_compile.compile(str(target), doraise=True)
+        for target, old_source, new_source in (
+            (eud_target, eud_source, eud_patched),
+            (cot_target, cot_source, cot_patched),
+        ):
+            if new_source == old_source:
+                continue
+
+            backup = target.with_name(target.name + f".bak-airsoft-team-{stamp}")
+            shutil.copy2(target, backup)
+            backups[target] = backup
+            target.write_text(new_source, encoding="utf-8")
+            py_compile.compile(str(target), doraise=True)
+            print(f"Backup: {backup}")
+
     except Exception:
-        shutil.copy2(backup, target)
+        for target, backup in backups.items():
+            shutil.copy2(backup, target)
         raise
 
-    print(f"Backup: {backup}")
-    print("Installed V4; Python compile check passed.")
-    print("Restart opentakserver-1713.service and reconnect game devices.")
+    print("Installed V5; Python compile checks passed.")
+    print("Restart opentakserver-1713.service and reconnect all test devices.")
     return 0
 
 
