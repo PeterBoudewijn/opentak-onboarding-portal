@@ -289,6 +289,10 @@ def _revoke_session_credentials(team_key, session, reason):
     finally:
         otsClient.deactivate_user(username)
 
+    # Closed session accounts no longer need any team routing membership.
+    for direction in ("IN", "OUT"):
+        _safe_remove_membership(username, GAME_TEAMS[team_key]["group"], direction)
+
     _mark_session_closed(team_key, username, reason)
     return {
         "username": username,
@@ -462,6 +466,25 @@ def generate_game_access(team_key):
 
     except Exception as exc:
         current_app.logger.exception("Failed to generate game access for %s", team_key)
+
+        # A request can fail after OTS already created the temporary account.
+        # If that happens before _record_session(), immediately make the partial
+        # account unusable and remove its team memberships.
+        partial_username = locals().get("username")
+        if partial_username:
+            try:
+                otsClient.deactivate_user(partial_username)
+            except Exception:
+                current_app.logger.exception(
+                    "Failed to deactivate partial game account %s", partial_username
+                )
+            for direction in ("IN", "OUT"):
+                _safe_remove_membership(
+                    partial_username,
+                    GAME_TEAMS[team_key]["group"],
+                    direction,
+                )
+
         return jsonify({"error": f"Failed to generate game access: {exc}"}), 500
 
 
