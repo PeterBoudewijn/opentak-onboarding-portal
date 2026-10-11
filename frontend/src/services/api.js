@@ -14,11 +14,14 @@ const getApiBaseUrl = () => {
     return 'http://localhost:5000';
   }
 
-  // For production builds or any other case, use same origin (API served from same host)
-  return window.location.origin;
+  // Production is reverse-proxied under Vite's public base path (/game/).
+  // Keep portal API traffic away from OpenTAKServer's own /api routes.
+  const publicBasePath = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
+  return `${window.location.origin}${publicBasePath}`;
 };
 
 const API_BASE_URL = getApiBaseUrl();
+const PUBLIC_BASE_PATH = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
 
 // Log API URL in development for debugging
 if (import.meta.env.DEV) {
@@ -87,7 +90,7 @@ api.interceptors.response.use(
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
         localStorage.removeItem('user');
-        window.location.href = '/login';
+        window.location.href = `${PUBLIC_BASE_PATH}/login`;
         return Promise.reject(refreshError);
       }
     }
