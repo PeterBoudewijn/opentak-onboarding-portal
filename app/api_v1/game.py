@@ -4,7 +4,7 @@ Airsoft game mode API.
 Security model:
 - GameRed and GameBlue are logical team labels and OTS group names.
 - Every generated game session uses a unique, human-readable OTS username
-  (for example teamrood_4821). Old client certificates therefore remain tied
+  (for example rood_4821). Old client certificates therefore remain tied
   to an account that is never reactivated and is deleted after disconnect.
 - Each session user belongs exclusively to its own team group (IN + OUT).
 - Red/blue game leaders only see their own team.
@@ -55,33 +55,38 @@ def _random_password(length=24):
     return "".join(secrets.choice(alphabet) for _ in range(length))
 
 
-GAME_PASSWORD_WORDS = (
-    "anker", "appel", "berg", "berk", "blad", "bloem", "brug", "duin",
-    "egel", "eiland", "fiets", "golf", "gras", "hamer", "haven", "helm",
-    "hert", "kano", "kever", "kiezel", "klok", "kompas", "kraan", "leeuw",
-    "linde", "maan", "meer", "molen", "munt", "nacht", "noot", "oever",
-    "otter", "paal", "pad", "parel", "reiger", "rivier", "rots", "sabel",
-    "schip", "sleutel", "sneeuw", "ster", "strand", "toren", "trein", "valk",
-    "veld", "vis", "vlam", "vogel", "vos", "water", "wolk", "zand",
-    "zee", "zon", "bizon", "ceder", "delta", "gans", "ibis", "koraal",
-    "mango", "oase", "panda", "radar", "spar", "tulp", "vlier", "walvis",
-    "zeil", "aster", "bamboe", "cactus", "eik", "fenix", "havik", "inkt",
-    "kajak", "lepel", "nova", "olijf", "roos", "tijger", "uil", "veer",
-    "wind", "zebra", "amber", "bonsai", "cirkel", "donder", "limoen", "marmer",
+GAME_PASSWORD_STREETS = (
+    "Acacialaan", "Beatrixstraat", "Beukenlaan", "Boslaan", "Brinkstraat",
+    "Burgemeesterstraat", "Dahliastraat", "Dennenlaan", "Dorpsstraat",
+    "Eikenlaan", "Emmastraat", "Esdoornlaan", "Goudsbloemstraat",
+    "Havenstraat", "Heidestraat", "Herenstraat", "Iepenlaan", "Julianastraat",
+    "Kerklaan", "Kerkstraat", "Korenstraat", "Korteweg", "Langeweg",
+    "Leliestraat", "Lindenlaan", "Margrietstraat", "Marktstraat",
+    "Meidoornlaan", "Molenstraat", "Molenweg", "Nieuwstraat", "Noordstraat",
+    "Oranjestraat", "Parklaan", "Pastoorstraat", "Pleinweg", "Prinsesstraat",
+    "Rietstraat", "Rozenstraat", "Schoolstraat", "Spoorlaan", "Stationsstraat",
+    "Veldstraat", "Vijverlaan", "Wilhelminastraat", "Zandstraat", "Zuidstraat",
+    "Akkerweg", "Berkenlaan", "Bloemenstraat", "Boomgaardweg", "Boterstraat",
+    "Bremstraat", "Brugstraat", "Dijkstraat", "Duinweg", "Griendweg",
+    "Groenestraat", "Hoefstraat", "Kastanjelaan", "Klaverstraat", "Kloosterstraat",
+    "Korenbloemstraat", "Kruisstraat", "Lijsterlaan", "Madeliefstraat",
+    "Meistraat", "Middenweg", "Nieuweweg", "Oosterstraat", "Patrijslaan",
+    "Populierenlaan", "Rivierstraat", "Singelstraat", "Sparrenlaan",
+    "Torenstraat", "Tulpenstraat", "Valkenlaan", "Veerstraat", "Waterstraat",
+    "Weidestraat", "Weststraat", "Zonnebloemstraat", "Zwaluwlaan",
 )
 
 
 def _human_game_password():
-    """Easy temporary password for manual entry on iPhone/iTAK."""
-    first = secrets.choice(GAME_PASSWORD_WORDS)
-    second = secrets.choice(GAME_PASSWORD_WORDS)
-    number = secrets.randbelow(9000) + 1000
-    return f"{first}-{second}-{number}"
+    """Easy one-day password: a Dutch-style street name plus house number."""
+    street = secrets.choice(GAME_PASSWORD_STREETS)
+    house_number = secrets.randbelow(9000) + 1000
+    return f"{street}{house_number}"
 
 
 def _new_session_username(team_key):
     """Human-readable temporary username; uniqueness is verified by OTS."""
-    prefix = "teamrood" if team_key == "red" else "teamblauw"
+    prefix = "rood" if team_key == "red" else "blauw"
     # OTS 1.7.13 usernames allow letters, numbers, underscores and periods.
     # Four digits are easy to read/type; create_user() below retries collisions.
     suffix = secrets.randbelow(9000) + 1000
