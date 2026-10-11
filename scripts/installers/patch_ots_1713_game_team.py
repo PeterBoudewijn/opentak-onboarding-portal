@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
 """Patch OpenTAKServer 1.7.13 for isolated Airsoft game teams.
 
-Run with the Python interpreter from the OpenTAKServer 1.7.13 virtualenv.
+This patch adds two narrowly-scoped fixes:
 
-For authenticated users in exactly one reserved IN group:
-  GameRed  -> outgoing __group name="Red",  role="Team Member"
-  GameBlue -> outgoing __group name="Blue", role="Team Member"
+1. Game team color enforcement
+   GameRed  -> outgoing __group name="Red"
+   GameBlue -> outgoing __group name="Blue"
 
-V3 also fixes device-UID reuse. OTS normally reuses the RabbitMQ UID queue,
-which can retain bindings from a previous account/team. For a game account,
-the UID queue is deleted and recreated before current group bindings are
-applied. This removes stale GameRed/GameBlue/__ANON__/normal-group bindings.
+2. Per-device RabbitMQ group-binding reset
+   When an authenticated SSL EUD reconnects, remove every old group binding
+   for that device UID before binding the OUT groups of the currently
+   authenticated user. This prevents a reused phone/tablet UID from retaining
+   GameRed, GameBlue, __ANON__, or normal-group subscriptions from a previous
+   login.
 
-All non-game accounts keep the original OTS behavior.
+The script is idempotent, creates a timestamped backup, and byte-compiles the
+modified EudHandler.py before reporting success.
 """
 
 from __future__ import annotations
@@ -28,16 +31,11 @@ MARKER_V1 = "# AIRSOFT_GAME_TEAM_OVERRIDE_V1"
 MARKER_V2 = "# AIRSOFT_GAME_TEAM_OVERRIDE_V2"
 MARKER_V3 = "# AIRSOFT_GAME_TEAM_OVERRIDE_V3"
 
-V1_LATE_INIT = """        # Per-connection state for the game-only team override.
-        self.airsoft_game_team = None
-        self.airsoft_game_team_checked = False
-"""
-
-SETUP_OLD = """    def setup(self):
+SETUP_BASE = """    def setup(self):
         self.create_app()
 """
 
-SETUP_NEW = """    def setup(self):
+SETUP_V2 = """    def setup(self):
         # BaseRequestHandler calls setup()/handle() from inside super().__init__().
         # Initialize game state here, before the first CoT can be processed.
         self.airsoft_game_team = None
@@ -45,10 +43,25 @@ SETUP_NEW = """    def setup(self):
         self.create_app()
 """
 
+SETUP_V3 = """    def setup(self):
+        # BaseRequestHandler calls setup()/handle() from inside super().__init__().
+        # Keep all mutable connection state per handler instance.
+        self.airsoft_game_team = None
+        self.airsoft_game_team_checked = False
+        self.bound_queues = []
+        self.group_memberships = []
+        self.create_app()
+"""
+
+V1_LATE_INIT = """        # Per-connection state for the game-only team override.
+        self.airsoft_game_team = None
+        self.airsoft_game_team_checked = False
+"""
+
 HELPER_ANCHOR = """    def handle_cot(self, cot):
 """
 
-HELPER_V3 = """    # AIRSOFT_GAME_TEAM_OVERRIDE_V3
+TEAM_HELPER_V3 = """    # AIRSOFT_GAME_TEAM_OVERRIDE_V3
     def _apply_airsoft_game_team(self, event):
         \"\"\"Force reserved game accounts to publish the configured team color.\"\"\"
         if not event or not self.is_ssl or not self.user:
@@ -111,15 +124,45 @@ HELPER_V3 = """    # AIRSOFT_GAME_TEAM_OVERRIDE_V3
             ).find("__group")
             detail.append(group)
 
+    def _reset_ssl_group_bindings(self):
+        \"\"\"Drop stale group bindings for this UID before applying current memberships.\"\"\"
+        if not self.is_ssl or not self.uid or not self.rabbit_channel:
+            return
+
+        # A durable/non-exclusive queue can survive an account/team change for
+        # the same device UID. Remove all known group routing keys so the queue
+        # cannot retain subscriptions from a previous authenticated user.
+        groups = db.session.execute(db.session.query(Group)).all()
+        routing_keys = {"__ANON__.IN", "__ANON__.OUT"}
+
+        for row in groups:
+            group = row[0]
+            if group and group.name:
+                routing_keys.add(f"{group.name}.IN")
+                routing_keys.add(f"{group.name}.OUT")
+
+        for routing_key in routing_keys:
+            self.rabbit_channel.queue_unbind(
+                exchange="groups",
+                queue=self.uid,
+                routing_key=routing_key,
+            )
+
+        self.logger.warning(
+            "Reset RabbitMQ group bindings for %s (%s)",
+            self.uid,
+            self.user.username if self.user else "unknown",
+        )
+
 """
 
-CALL_OLD = """        if self.pong(event):
+CALL_BASE = """        if self.pong(event):
             return
 
         if event and not self.uid:
 """
 
-CALL_NEW = """        if self.pong(event):
+CALL_PATCHED = """        if self.pong(event):
             return
 
         self._apply_airsoft_game_team(event)
@@ -127,33 +170,13 @@ CALL_NEW = """        if self.pong(event):
         if event and not self.uid:
 """
 
-QUEUE_OLD = """                    self.rabbit_channel.queue_declare(queue=self.callsign)
-                    self.rabbit_channel.queue_declare(queue=self.uid)
-
-                    with self.app.app_context():
+BIND_ANCHOR = """                        if self.is_ssl:
+                            group_memberships = db.session.execute(
 """
 
-QUEUE_NEW = """                    self.rabbit_channel.queue_declare(queue=self.callsign)
-
-                    # A physical device can move from a normal account to a game
-                    # account, or from GameRed to GameBlue, while keeping the same
-                    # TAK UID. RabbitMQ queues survive that switch and therefore
-                    # retain old bindings. For game users, recreate only the UID
-                    # queue before applying the current OTS OUT memberships.
-                    if self.airsoft_game_team:
-                        self.logger.warning(
-                            "Resetting stale group bindings for game EUD %s (%s)",
-                            self.uid,
-                            self.user.username,
-                        )
-                        # Declare first so queue_delete cannot fail because a new
-                        # device has no pre-existing queue.
-                        self.rabbit_channel.queue_declare(queue=self.uid)
-                        self.rabbit_channel.queue_delete(queue=self.uid)
-
-                    self.rabbit_channel.queue_declare(queue=self.uid)
-
-                    with self.app.app_context():
+BIND_PATCHED = """                        if self.is_ssl:
+                            self._reset_ssl_group_bindings()
+                            group_memberships = db.session.execute(
 """
 
 
@@ -167,46 +190,24 @@ def locate_target() -> Path:
     return Path(spec.origin).resolve()
 
 
-def install_core(source: str) -> str:
-    if SETUP_NEW not in source:
-        if SETUP_OLD not in source:
-            raise RuntimeError("Expected OTS 1.7.13 setup() pattern not found.")
-        source = source.replace(SETUP_OLD, SETUP_NEW, 1)
+def replace_existing_helper(source: str) -> str:
+    start = -1
+    for marker in (MARKER_V1, MARKER_V2):
+        pos = source.find("    " + marker)
+        if pos >= 0:
+            start = pos
+            break
 
-    if "_apply_airsoft_game_team" not in source:
+    if start < 0:
         if HELPER_ANCHOR not in source:
-            raise RuntimeError("Expected OTS 1.7.13 handle_cot() pattern not found.")
-        source = source.replace(HELPER_ANCHOR, HELPER_V3 + HELPER_ANCHOR, 1)
+            raise RuntimeError("Could not find handle_cot() insertion point.")
+        return source.replace(HELPER_ANCHOR, TEAM_HELPER_V3 + HELPER_ANCHOR, 1)
 
-    if "self._apply_airsoft_game_team(event)" not in source:
-        if CALL_OLD not in source:
-            raise RuntimeError("Expected OTS 1.7.13 handle_cot call site not found.")
-        source = source.replace(CALL_OLD, CALL_NEW, 1)
+    end = source.find(HELPER_ANCHOR, start)
+    if end < 0:
+        raise RuntimeError("Could not find end of existing Airsoft helper block.")
 
-    return source
-
-
-def upgrade_marker_and_logging(source: str) -> str:
-    source = source.replace(V1_LATE_INIT, "", 1)
-    source = source.replace(MARKER_V1, MARKER_V3, 1)
-    source = source.replace(MARKER_V2, MARKER_V3, 1)
-    source = source.replace(
-        '                self.logger.info(\n                    "Airsoft game team override for %s: %s",',
-        '                self.logger.warning(\n                    "Airsoft game team override for %s: %s",',
-        1,
-    )
-    return source
-
-
-def install_queue_reset(source: str) -> str:
-    if "Resetting stale group bindings for game EUD" in source:
-        return source
-    if QUEUE_OLD not in source:
-        raise RuntimeError(
-            "Expected OTS 1.7.13 UID queue declaration block not found. "
-            "Refusing to modify the file."
-        )
-    return source.replace(QUEUE_OLD, QUEUE_NEW, 1)
+    return source[:start] + TEAM_HELPER_V3 + source[end:]
 
 
 def main() -> int:
@@ -214,42 +215,46 @@ def main() -> int:
     source = target.read_text(encoding="utf-8")
     print(f"Target: {target}")
 
-    if MARKER_V3 in source and "Resetting stale group bindings for game EUD" in source:
+    if MARKER_V3 in source and BIND_PATCHED in source and SETUP_V3 in source:
         print("V3 patch is already installed; no changes made.")
         return 0
 
-    had_v1 = MARKER_V1 in source
-    had_v2 = MARKER_V2 in source
+    # Repair the V1 initialization bug if that old patch is encountered.
+    source = source.replace(V1_LATE_INIT, "", 1)
 
-    patched = install_core(source)
-    patched = upgrade_marker_and_logging(patched)
-    patched = install_queue_reset(patched)
+    if SETUP_V3 not in source:
+        if SETUP_V2 in source:
+            source = source.replace(SETUP_V2, SETUP_V3, 1)
+        elif SETUP_BASE in source:
+            source = source.replace(SETUP_BASE, SETUP_V3, 1)
+        else:
+            raise RuntimeError("Expected OTS 1.7.13 setup() pattern not found.")
 
-    # A fresh install_core() inserted the V3 marker already. Older installs are
-    # upgraded above.
-    if MARKER_V3 not in patched:
-        raise RuntimeError("V3 marker missing after patch construction.")
+    source = replace_existing_helper(source)
+
+    if CALL_PATCHED not in source:
+        if CALL_BASE not in source:
+            raise RuntimeError("Expected OTS 1.7.13 handle_cot call site not found.")
+        source = source.replace(CALL_BASE, CALL_PATCHED, 1)
+
+    if BIND_PATCHED not in source:
+        if BIND_ANCHOR not in source:
+            raise RuntimeError("Expected OTS 1.7.13 SSL group-binding block not found.")
+        source = source.replace(BIND_ANCHOR, BIND_PATCHED, 1)
 
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     backup = target.with_name(target.name + f".bak-airsoft-team-{stamp}")
     shutil.copy2(target, backup)
 
     try:
-        target.write_text(patched, encoding="utf-8")
+        target.write_text(source, encoding="utf-8")
         py_compile.compile(str(target), doraise=True)
     except Exception:
         shutil.copy2(backup, target)
         raise
 
-    if had_v2:
-        action = "Upgraded V2 -> V3"
-    elif had_v1:
-        action = "Upgraded V1 -> V3"
-    else:
-        action = "Installed V3"
-
     print(f"Backup: {backup}")
-    print(f"{action}; Python compile check passed.")
+    print("Installed V3; Python compile check passed.")
     print("Restart opentakserver-1713.service and reconnect game devices.")
     return 0
 
