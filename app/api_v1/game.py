@@ -1,25 +1,25 @@
 """
 Airsoft game mode API.
 
-Provides isolated GameRed/GameBlue access on top of OpenTAKServer without
-modifying OTS database tables directly.
-
 Security model:
-- GameRed belongs only to the GameRed OTS group (IN + OUT)
-- GameBlue belongs only to the GameBlue OTS group (IN + OUT)
-- red/blue game leaders only see their own team
-- only the full portal administrator can close/clean up teams
+- GameRed and GameBlue are logical team labels and OTS group names.
+- Every generated game session uses a unique OTS username (for example
+  GameRed_a1b2c3d4). Old client certificates therefore remain tied to an
+  account that is never reactivated.
+- Each session user belongs exclusively to its own team group (IN + OUT).
+- Red/blue game leaders only see their own team.
+- Only the portal administrator can close all tracked sessions.
 - ATAK enrollment tokens expire at the next 23:00 Europe/Amsterdam,
-  capped at 24 hours
-- at 23:00 both game accounts are deactivated, passwords are rotated and
-  ATAK QR tokens are invalidated. EUD row deletion is deliberately not done
-  here because OpenTAKServer does not expose a supported DELETE /api/eud API.
+  capped at 24 real hours.
 """
 
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
+import json
+import os
 import secrets
 import string
+import threading
 
 from flask import current_app, jsonify, request
 from flask_jwt_extended import jwt_required
@@ -33,27 +33,33 @@ from app.rbac import get_user_roles
 GAME_TZ = ZoneInfo("Europe/Amsterdam")
 GAME_TEAMS = {
     "red": {
-        "username": "GameRed",
+        "label": "GameRed",
         "group": "GameRed",
         "team_color": "Red",
         "leader_role": "game_red_leader",
     },
     "blue": {
-        "username": "GameBlue",
+        "label": "GameBlue",
         "group": "GameBlue",
         "team_color": "Blue",
         "leader_role": "game_blue_leader",
     },
 }
+_STATE_LOCK = threading.Lock()
 
 
 def _random_password(length=24):
-    alphabet = string.ascii_letters + string.digits + "!@#$%*-_"
+    alphabet = string.ascii_letters + string.digits + "!@#$%*_"
     return "".join(secrets.choice(alphabet) for _ in range(length))
 
 
+def _new_session_username(team_key):
+    # OpenTAKServer usernames allow letters, numbers, underscores and periods.
+    return f"{GAME_TEAMS[team_key]['label']}_{secrets.token_hex(4)}"
+
+
 def _next_cutoff(now=None):
-    """Return the earliest of next local 23:00 or exactly 24 hours from now."""
+    """Return the earliest of next local 23:00 or exactly 24 real hours."""
     now = now or datetime.now(GAME_TZ)
     if now.tzinfo is None:
         now = now.replace(tzinfo=GAME_TZ)
@@ -64,10 +70,61 @@ def _next_cutoff(now=None):
     if now >= cutoff:
         cutoff += timedelta(days=1)
 
-    # Compute the 24-hour cap on the UTC timeline. Local-time arithmetic can
-    # otherwise last 25 real hours across the autumn DST transition.
+    # UTC-timeline cap keeps the duration <=24 real hours across DST fallback.
     hard_limit = (now.astimezone(timezone.utc) + timedelta(hours=24)).astimezone(GAME_TZ)
     return cutoff if cutoff.timestamp() <= hard_limit.timestamp() else hard_limit
+
+
+def _state_path():
+    configured = current_app.config.get("GAME_STATE_FILE", "instance/game_state.json")
+    if os.path.isabs(configured):
+        return configured
+    project_root = os.path.dirname(current_app.root_path)
+    return os.path.join(project_root, configured)
+
+
+def _empty_state():
+    return {
+        "version": 1,
+        "teams": {
+            team_key: {"current": None, "sessions": []}
+            for team_key in GAME_TEAMS
+        },
+    }
+
+
+def _load_state_unlocked():
+    path = _state_path()
+    if not os.path.exists(path):
+        return _empty_state()
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            state = json.load(handle)
+    except (OSError, ValueError):
+        current_app.logger.exception("Could not read airsoft game state")
+        return _empty_state()
+
+    state.setdefault("version", 1)
+    state.setdefault("teams", {})
+    for team_key in GAME_TEAMS:
+        state["teams"].setdefault(team_key, {"current": None, "sessions": []})
+        state["teams"][team_key].setdefault("current", None)
+        state["teams"][team_key].setdefault("sessions", [])
+    return state
+
+
+def _save_state_unlocked(state):
+    path = _state_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    temp_path = path + ".tmp"
+    with open(temp_path, "w", encoding="utf-8") as handle:
+        json.dump(state, handle, indent=2, sort_keys=True)
+    os.replace(temp_path, path)
+
+
+def _read_state():
+    with _STATE_LOCK:
+        return _load_state_unlocked()
 
 
 def _response_payload(response):
@@ -126,15 +183,12 @@ def _safe_remove_membership(username, group_name, direction):
         pass
 
 
-def _ensure_team_isolation(team_key):
+def _ensure_team_isolation(team_key, username):
     team = GAME_TEAMS[team_key]
-    username = team["username"]
     group_name = team["group"]
-
     _ensure_group_exists(group_name)
 
-    # Remove every membership except the team's own group. This prevents
-    # accidental visibility through __ANON__ or an unrelated OTS group.
+    # Remove every membership except the team's own group.
     groups_response = otsClient.get_groups(page=1, page_size=500)
     for group in _response_results(groups_response):
         existing_group = group.get("name")
@@ -143,27 +197,22 @@ def _ensure_team_isolation(team_key):
         for direction in ("IN", "OUT"):
             _safe_remove_membership(username, existing_group, direction)
 
-    # Rebuild the desired memberships so stale direction state cannot survive.
+    # Rebuild desired membership so direction state is deterministic.
     for direction in ("IN", "OUT"):
         _safe_remove_membership(username, group_name, direction)
         otsClient.add_user_to_group(username, group_name, direction)
 
 
-def _get_team_euds(team_key):
-    username = GAME_TEAMS[team_key]["username"]
+def _get_user_euds(username):
+    if not username:
+        return []
     response = otsClient.get_euds(page=1, page_size=500, username=username)
     return _response_results(response)
 
 
-def _sync_team_color_profiles(team_key, euds=None):
-    """
-    Configure ATAK connection profiles for discovered EUDs.
-
-    OTS supports the ATAK preference key locationTeam. Profiles are attached
-    per EUD UID so GameRed and GameBlue can use different colors on one server.
-    """
+def _sync_team_color_profiles(team_key, username, euds=None):
     team = GAME_TEAMS[team_key]
-    euds = euds if euds is not None else _get_team_euds(team_key)
+    euds = euds if euds is not None else _get_user_euds(username)
     synced = 0
     errors = []
 
@@ -197,20 +246,87 @@ def _sync_team_color_profiles(team_key, euds=None):
     return {"synced": synced, "errors": errors}
 
 
+def _current_session(team_key):
+    return _read_state()["teams"][team_key].get("current")
+
+
+def _mark_session_closed(team_key, username, reason):
+    with _STATE_LOCK:
+        state = _load_state_unlocked()
+        team_state = state["teams"][team_key]
+        for session in team_state["sessions"]:
+            if session.get("username") == username:
+                session["closedAt"] = datetime.now(GAME_TZ).isoformat()
+                session["closeReason"] = reason
+        if team_state.get("current") and team_state["current"].get("username") == username:
+            team_state["current"] = None
+        _save_state_unlocked(state)
+
+
+def _record_session(team_key, session):
+    with _STATE_LOCK:
+        state = _load_state_unlocked()
+        state["teams"][team_key]["sessions"].append(session)
+        state["teams"][team_key]["current"] = session
+        _save_state_unlocked(state)
+
+
+def _revoke_session_credentials(team_key, session, reason):
+    username = session.get("username")
+    if not username:
+        return {"username": None, "credentialsRevoked": False}
+
+    euds = _get_user_euds(username)
+
+    try:
+        otsClient.delete_atak_qr_string(username)
+    except Exception:
+        pass
+
+    try:
+        # Rotate first as defense in depth; then deactivate permanently.
+        otsClient.reset_user_password(username, _random_password())
+    finally:
+        otsClient.deactivate_user(username)
+
+    _mark_session_closed(team_key, username, reason)
+    return {
+        "username": username,
+        "eudCount": len(euds),
+        "euds": euds,
+        "credentialsRevoked": True,
+        "accountDeactivated": True,
+    }
+
+
+def _close_current_session(team_key, reason):
+    session = _current_session(team_key)
+    if not session:
+        return None
+    return _revoke_session_credentials(team_key, session, reason)
+
+
 def _team_status(team_key):
     team = GAME_TEAMS[team_key]
-    euds = _get_team_euds(team_key)
-    profile_sync = _sync_team_color_profiles(team_key, euds)
+    current = _current_session(team_key)
+    username = current.get("username") if current else None
+    euds = _get_user_euds(username)
+    profile_sync = (
+        _sync_team_color_profiles(team_key, username, euds)
+        if username else {"synced": 0, "errors": []}
+    )
 
     return {
         "team": team_key,
-        "username": team["username"],
+        "accountLabel": team["label"],
+        "username": username,
         "group": team["group"],
         "teamColor": team["team_color"],
         "eudCount": len(euds),
         "euds": euds,
         "profileSync": profile_sync,
-        "nextCutoff": _next_cutoff().isoformat(),
+        "expiresAt": current.get("expiresAt") if current else None,
+        "activeSession": bool(current),
         "hardEudDeleteAvailable": False,
     }
 
@@ -229,7 +345,7 @@ def game_status():
                 current_app.logger.exception("Failed to load game team status")
                 teams.append({
                     "team": team_key,
-                    "username": GAME_TEAMS[team_key]["username"],
+                    "accountLabel": GAME_TEAMS[team_key]["label"],
                     "group": GAME_TEAMS[team_key]["group"],
                     "teamColor": GAME_TEAMS[team_key]["team_color"],
                     "error": str(exc),
@@ -243,9 +359,9 @@ def game_status():
         "teams": teams,
         "hardEudDeleteAvailable": False,
         "hardEudDeleteNote": (
-            "OpenTAKServer has no supported DELETE /api/eud endpoint. "
-            "The portal can invalidate credentials and deactivate game accounts; "
-            "physical EUD-row deletion requires an OTS-side helper."
+            "Historic EUD rows remain in OpenTAKServer because it has no supported "
+            "DELETE /api/eud endpoint. Security does not depend on deleting those rows: "
+            "every game session has a unique OTS username that is never reactivated."
         ),
     }), 200
 
@@ -267,40 +383,67 @@ def generate_game_access(team_key):
         return jsonify({"error": "maxUses must be a positive integer"}), 400
 
     try:
-        _ensure_team_isolation(team_key)
-        otsClient.activate_user(team["username"])
+        # A refresh is a new security generation: permanently close the old account.
+        previous = _close_current_session(team_key, "superseded")
+        if previous:
+            current_app.logger.info(
+                "Closed previous %s game session %s", team_key, previous["username"]
+            )
 
         password = _random_password()
-        otsClient.reset_user_password(team["username"], password)
+        username = None
+        last_error = None
+
+        # Extremely unlikely collision protection.
+        for _ in range(3):
+            candidate = _new_session_username(team_key)
+            try:
+                otsClient.create_user(candidate, password, roles=["user"])
+                username = candidate
+                break
+            except Exception as exc:
+                last_error = exc
+
+        if not username:
+            raise RuntimeError(f"Could not create unique game user: {last_error}")
+
+        _ensure_team_isolation(team_key, username)
+        otsClient.activate_user(username)
 
         cutoff = _next_cutoff()
         expires_at = int(cutoff.timestamp())
 
-        try:
-            otsClient.delete_atak_qr_string(team["username"])
-        except Exception:
-            pass
-
         atak_response = otsClient.create_atak_qr_string(
-            username=team["username"],
+            username=username,
             exp=expires_at,
             max_uses=max_uses,
         )
         atak_payload = _response_payload(atak_response)
 
-        itak_response = otsClient.get_itak_qr_string(team["username"])
-        itak_payload = itak_response.get("response") if isinstance(itak_response, dict) else itak_response
+        itak_response = otsClient.get_itak_qr_string(username)
+        itak_payload = (
+            itak_response.get("response")
+            if isinstance(itak_response, dict)
+            else itak_response
+        )
         if isinstance(itak_payload, dict):
             itak_string = itak_payload.get("qr_string") or itak_payload.get("response")
         else:
             itak_string = itak_payload
 
-        euds = _get_team_euds(team_key)
-        profile_sync = _sync_team_color_profiles(team_key, euds)
+        session = {
+            "username": username,
+            "createdAt": datetime.now(GAME_TZ).isoformat(),
+            "expiresAt": cutoff.isoformat(),
+            "closedAt": None,
+            "closeReason": None,
+        }
+        _record_session(team_key, session)
 
         return jsonify({
             "team": team_key,
-            "username": team["username"],
+            "accountLabel": team["label"],
+            "username": username,
             "password": password,
             "group": team["group"],
             "teamColor": team["team_color"],
@@ -314,43 +457,12 @@ def generate_game_access(team_key):
                 "expiresAt": expires_at,
             },
             "expiresAt": cutoff.isoformat(),
-            "profileSync": profile_sync,
             "passwordShownOnce": True,
         }), 200
 
     except Exception as exc:
         current_app.logger.exception("Failed to generate game access for %s", team_key)
         return jsonify({"error": f"Failed to generate game access: {exc}"}), 500
-
-
-def _close_team(team_key):
-    team = GAME_TEAMS[team_key]
-    euds = _get_team_euds(team_key)
-
-    try:
-        otsClient.delete_atak_qr_string(team["username"])
-    except Exception:
-        pass
-
-    # Rotate before deactivating so a later accidental reactivation cannot expose
-    # yesterday's password.
-    otsClient.reset_user_password(team["username"], _random_password())
-    otsClient.deactivate_user(team["username"])
-
-    return {
-        "team": team_key,
-        "username": team["username"],
-        "eudCount": len(euds),
-        "euds": euds,
-        "credentialsRevoked": True,
-        "accountDeactivated": True,
-        "hardEudDeleted": False,
-        "note": (
-            "Credentials were revoked and the shared game account was deactivated. "
-            "OpenTAKServer does not expose a supported EUD DELETE API, so historic "
-            "EUD rows are not physically deleted by this endpoint."
-        ),
-    }
 
 
 @api_v1.route("/game/admin/cleanup/<team_key>", methods=["POST"])
@@ -362,17 +474,31 @@ def cleanup_game_team(team_key):
     if team_key not in GAME_TEAMS:
         return jsonify({"error": "Unknown game team"}), 404
 
-    try:
-        result = _close_team(team_key)
-        current_app.logger.warning(
-            "Airsoft cleanup requested for %s: %s EUD(s)",
-            team_key,
-            result["eudCount"],
-        )
-        return jsonify(result), 200
-    except Exception as exc:
-        current_app.logger.exception("Airsoft cleanup failed for %s", team_key)
-        return jsonify({"error": f"Cleanup failed: {exc}"}), 500
+    state = _read_state()
+    sessions = list(state["teams"][team_key].get("sessions", []))
+    results = []
+    failures = []
+
+    for session in sessions:
+        if session.get("closedAt"):
+            continue
+        try:
+            results.append(_revoke_session_credentials(team_key, session, "admin_cleanup"))
+        except Exception as exc:
+            failures.append({"username": session.get("username"), "error": str(exc)})
+
+    return jsonify({
+        "team": team_key,
+        "sessionsClosed": len(results),
+        "eudCount": sum(item.get("eudCount", 0) for item in results),
+        "results": results,
+        "failures": failures,
+        "hardEudDeleted": False,
+        "note": (
+            "All tracked game session accounts were deactivated permanently. "
+            "Historic OTS EUD rows remain because OTS exposes no supported EUD DELETE API."
+        ),
+    }), 207 if failures else 200
 
 
 @api_v1.route("/game/admin/cleanup", methods=["POST"])
@@ -385,13 +511,23 @@ def cleanup_all_game_teams():
     results = []
     failures = []
     for team_key in GAME_TEAMS:
-        try:
-            results.append(_close_team(team_key))
-        except Exception as exc:
-            failures.append({"team": team_key, "error": str(exc)})
+        state = _read_state()
+        sessions = list(state["teams"][team_key].get("sessions", []))
+        for session in sessions:
+            if session.get("closedAt"):
+                continue
+            try:
+                result = _revoke_session_credentials(team_key, session, "admin_cleanup_all")
+                result["team"] = team_key
+                results.append(result)
+            except Exception as exc:
+                failures.append({
+                    "team": team_key,
+                    "username": session.get("username"),
+                    "error": str(exc),
+                })
 
-    status = 207 if failures else 200
-    return jsonify({"results": results, "failures": failures}), status
+    return jsonify({"results": results, "failures": failures}), 207 if failures else 200
 
 
 @scheduler.task(
@@ -404,16 +540,18 @@ def cleanup_all_game_teams():
     max_instances=1,
 )
 def airsoft_game_credential_cutoff():
-    """Automatically revoke game credentials at 23:00 local time."""
+    """Permanently deactivate the current team session accounts at 23:00."""
     with scheduler.app.app_context():
         for team_key in GAME_TEAMS:
             try:
-                result = _close_team(team_key)
-                current_app.logger.info(
-                    "23:00 airsoft cutoff completed for %s (%s EUDs recorded)",
-                    team_key,
-                    result["eudCount"],
-                )
+                result = _close_current_session(team_key, "23:00_cutoff")
+                if result:
+                    current_app.logger.info(
+                        "23:00 airsoft cutoff completed for %s (%s, %s EUDs)",
+                        team_key,
+                        result["username"],
+                        result["eudCount"],
+                    )
             except Exception:
                 current_app.logger.exception(
                     "23:00 airsoft cutoff failed for %s", team_key
