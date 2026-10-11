@@ -41,6 +41,7 @@ import Approvals from './pages/Approvals';
 import ClaimRadio from './pages/ClaimRadio';
 import Kiosk from './pages/Kiosk';
 import KioskLogin from './pages/KioskLogin';
+import Game from './pages/Game';
 
 // Layout
 import Layout from './components/Layout';
@@ -245,6 +246,7 @@ function AppContent() {
               <Route path="announcements" element={<AnnouncementHistory />} />
               <Route path="approvals" element={<Approvals />} />
               <Route path="claim-radio/:nodeId" element={<ClaimRadio />} />
+              <Route path="game" element={<Game />} />
 
               {/* Admin routes */}
               <Route
