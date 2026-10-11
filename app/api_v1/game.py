@@ -213,6 +213,51 @@ def _safe_remove_membership(username, group_name, direction):
         pass
 
 
+def _group_members(group_name):
+    response = otsClient.get_group_members(group_name)
+    payload = response.get("response", {}) if isinstance(response, dict) else response
+    if isinstance(payload, dict):
+        members = payload.get("results", payload.get("members", []))
+    elif isinstance(payload, list):
+        members = payload
+    else:
+        members = []
+    return members if isinstance(members, list) else []
+
+
+def _enforce_reserved_team_group(team_key, allowed_username=None):
+    """Keep GameRed/GameBlue reserved for the current temporary game user only."""
+    group_name = GAME_TEAMS[team_key]["group"]
+    removed = []
+
+    for member in _group_members(group_name):
+        if isinstance(member, dict):
+            username = member.get("username")
+            direction = member.get("direction")
+        else:
+            username = str(member)
+            direction = None
+
+        if not username or username == allowed_username:
+            continue
+
+        directions = [direction] if direction in ("IN", "OUT") else ["IN", "OUT"]
+        for membership_direction in directions:
+            _safe_remove_membership(username, group_name, membership_direction)
+
+        if username not in removed:
+            removed.append(username)
+
+    if removed:
+        current_app.logger.warning(
+            "Removed non-game users from reserved group %s: %s",
+            group_name,
+            ", ".join(removed),
+        )
+
+    return removed
+
+
 def _ensure_team_isolation(team_key, username):
     team = GAME_TEAMS[team_key]
     group_name = team["group"]
@@ -231,6 +276,10 @@ def _ensure_team_isolation(team_key, username):
     for direction in ("IN", "OUT"):
         _safe_remove_membership(username, group_name, direction)
         otsClient.add_user_to_group(username, group_name, direction)
+
+    # Game team groups are reserved. A normal OTS user must never be able to
+    # publish into or subscribe to the live game team by sharing this group.
+    _enforce_reserved_team_group(team_key, username)
 
 
 def _get_user_euds(username):
@@ -344,6 +393,7 @@ def _team_status(team_key):
     team = GAME_TEAMS[team_key]
     current = _current_session(team_key)
     username = current.get("username") if current else None
+    outsiders_removed = _enforce_reserved_team_group(team_key, username)
     euds = _get_user_euds(username)
     profile_sync = (
         _sync_team_color_profiles(team_key, username, euds)
@@ -359,6 +409,7 @@ def _team_status(team_key):
         "eudCount": len(euds),
         "euds": euds,
         "profileSync": profile_sync,
+        "outsidersRemoved": outsiders_removed,
         "expiresAt": current.get("expiresAt") if current else None,
         "activeSession": bool(current),
         "hardEudDeleteAvailable": False,
