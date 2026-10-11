@@ -54,6 +54,8 @@ class OTSClient:
                 except ValueError as e:
                     print(f"Error Parsing Response: {e}")
                     raise ConnectionError(f"Invalid response from OTS server: {e}")
+            elif response_type == "text":
+                return {"response": response.text, "status_code": response.status_code}
             else:
                 return response
             
@@ -334,7 +336,13 @@ class OTSClient:
         params = {}
         if username is not None:
             params["username"] = username
-        return self.request_handler(method="GET", endpoint=self._itak_qr_string, params=params)
+        # OpenTAKServer 1.7.x returns this endpoint as plain text, not JSON.
+        return self.request_handler(
+            method="GET",
+            endpoint=self._itak_qr_string,
+            params=params,
+            response_type="text",
+        )
 
     def create_itak_qr_string(self, username=None, exp=None, nbf=None, max_uses=None):
         """
