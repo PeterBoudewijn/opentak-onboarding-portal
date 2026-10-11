@@ -518,6 +518,17 @@ export const qrAPI = {
   getItakQRString: (refresh = false) => api.get('/qr/itak', { params: { refresh: refresh ? 'true' : undefined } }),
 };
 
+// Airsoft Game API
+export const gameAPI = {
+  getStatus: () => api.get('/game/status'),
+  generateAccess: (team, maxUses = 250) =>
+    api.post(`/game/${team}/access`, { maxUses }),
+  cleanupTeam: (team) =>
+    api.post(`/game/admin/cleanup/${team}`),
+  cleanupAll: () =>
+    api.post('/game/admin/cleanup'),
+};
+
 // API Keys API
 
 export const apiKeysAPI = {
