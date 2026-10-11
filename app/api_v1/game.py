@@ -49,8 +49,36 @@ _STATE_LOCK = threading.Lock()
 
 
 def _random_password(length=24):
+    """Strong internal-only password used when revoking/closing accounts."""
     alphabet = string.ascii_letters + string.digits + "!#$%*_"
     return "".join(secrets.choice(alphabet) for _ in range(length))
+
+
+GAME_PASSWORD_WORDS = (
+    "Anker", "Appel", "Baken", "Berg", "Berk", "Blad", "Bliksem", "Bloem",
+    "Brug", "Dennen", "Dolfijn", "Duin", "Egel", "Eiland", "Fakkel", "Fiets",
+    "Fluit", "Golf", "Gras", "Hamer", "Haven", "Helm", "Hert", "Horizon",
+    "IJs", "Jager", "Kano", "Kasteel", "Kever", "Kiezel", "Klok", "Komeet",
+    "Kompas", "Kraan", "Leeuw", "Linde", "Maan", "Meer", "Molen", "Mossel",
+    "Munt", "Nacht", "Noot", "Oever", "Otter", "Paal", "Pad", "Parel",
+    "Pinguin", "Planeet", "Reiger", "Rivier", "Rots", "Sabel", "Schip", "Sleutel",
+    "Sneeuw", "Ster", "Strand", "Toren", "Trein", "Valk", "Veld", "Vis",
+    "Vlam", "Vogel", "Vos", "Water", "Wolk", "Zand", "Zee", "Zon",
+    "Bizon", "Ceder", "Delta", "Fjord", "Gans", "Hazel", "Ibis", "Koraal",
+    "Lantaarn", "Mango", "Nectar", "Oase", "Panda", "Radar", "Spar", "Tulp",
+    "Vlier", "Walvis", "Zeil", "Aster", "Bamboe", "Cactus", "Dageraad", "Eik",
+    "Fenix", "Gieter", "Havik", "Inkt", "Jasmijn", "Kajak", "Lepel", "Mammoet",
+    "Nova", "Olijf", "Pelikaan", "Quartz", "Roos", "Saturnus", "Tijger", "Uil",
+    "Veer", "Wind", "Yeti", "Zebra", "Amber", "Bonsai", "Cirkel", "Donder",
+    "Esdoorn", "Fakkel", "Gletsjer", "Klavertje", "Limoen", "Marmer", "Nevel", "Orion",
+)
+
+
+def _human_game_password():
+    """Readable temporary password for manual entry on iPhone/iTAK."""
+    words = [secrets.choice(GAME_PASSWORD_WORDS) for _ in range(3)]
+    number = secrets.randbelow(900) + 100
+    return "-".join(words + [str(number)])
 
 
 def _new_session_username(team_key):
@@ -394,7 +422,7 @@ def generate_game_access(team_key):
                 "Closed previous %s game session %s", team_key, previous["username"]
             )
 
-        password = _random_password()
+        password = _human_game_password()
         username = None
         last_error = None
 
