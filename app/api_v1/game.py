@@ -3,9 +3,9 @@ Airsoft game mode API.
 
 Security model:
 - GameRed and GameBlue are logical team labels and OTS group names.
-- Every generated game session uses a unique OTS username (for example
-  GameRed_a1b2c3d4). Old client certificates therefore remain tied to an
-  account that is never reactivated.
+- Every generated game session uses a unique, human-readable OTS username
+  (for example teamrood_4821). Old client certificates therefore remain tied
+  to an account that is never reactivated and is deleted after disconnect.
 - Each session user belongs exclusively to its own team group (IN + OUT).
 - Red/blue game leaders only see their own team.
 - Only the portal administrator can close all tracked sessions.
@@ -79,14 +79,13 @@ def _human_game_password():
     return f"{first}-{second}-{number}"
 
 
-GAME_SESSION_ID_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"
-
-
 def _new_session_username(team_key):
-    """Short, readable, collision-resistant temporary OTS username."""
-    prefix = "r" if team_key == "red" else "b"
-    suffix = "".join(secrets.choice(GAME_SESSION_ID_ALPHABET) for _ in range(6))
-    return f"{prefix}{suffix}"
+    """Human-readable temporary username; uniqueness is verified by OTS."""
+    prefix = "teamrood" if team_key == "red" else "teamblauw"
+    # OTS 1.7.13 usernames allow letters, numbers, underscores and periods.
+    # Four digits are easy to read/type; create_user() below retries collisions.
+    suffix = secrets.randbelow(9000) + 1000
+    return f"{prefix}_{suffix}"
 
 
 def _next_cutoff(now=None):
@@ -623,8 +622,8 @@ def generate_game_access(team_key):
         username = None
         last_error = None
 
-        # Extremely unlikely collision protection.
-        for _ in range(3):
+        # Human-friendly four-digit suffixes can collide, so retry generously.
+        for _ in range(10):
             candidate = _new_session_username(team_key)
             try:
                 otsClient.create_user(candidate, password, roles=["user"])
