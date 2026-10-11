@@ -4,7 +4,7 @@ Airsoft game mode API.
 Security model:
 - GameRed and GameBlue are logical team labels and OTS group names.
 - Every generated game session uses a unique, human-readable OTS username
-  (for example rood_4821). Old client certificates therefore remain tied
+  (for example rood4821). Old client certificates therefore remain tied
   to an account that is never reactivated and is deleted after disconnect.
 - Each session user belongs exclusively to its own team group (IN + OUT).
 - Red/blue game leaders only see their own team.
@@ -80,7 +80,7 @@ GAME_PASSWORD_STREETS = (
 def _human_game_password():
     """Easy one-day password: a Dutch-style street name plus house number."""
     street = secrets.choice(GAME_PASSWORD_STREETS)
-    house_number = secrets.randbelow(9000) + 1000
+    house_number = secrets.randbelow(90) + 10
     return f"{street}{house_number}"
 
 
@@ -90,7 +90,7 @@ def _new_session_username(team_key):
     # OTS 1.7.13 usernames allow letters, numbers, underscores and periods.
     # Four digits are easy to read/type; create_user() below retries collisions.
     suffix = secrets.randbelow(9000) + 1000
-    return f"{prefix}_{suffix}"
+    return f"{prefix}{suffix}"
 
 
 def _next_cutoff(now=None):
