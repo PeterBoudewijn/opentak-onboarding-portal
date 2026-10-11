@@ -119,6 +119,7 @@ function Game() {
           const generated = access[team.team];
           const atakQr = generated?.atak?.qrString;
           const itakQr = generated?.itak?.qrString;
+          const itakTeamProfileQr = generated?.itak?.teamProfileImportUri;
           const expiresAt = generated?.expiresAt || team.expiresAt;
           return (
             <section key={team.team} className={`game-card game-card-${team.team}`}>
@@ -161,16 +162,33 @@ function Game() {
                     </div>
                     <div className="game-qr game-itak-qr">
                       <h3>iPhone / iTAK</h3>
-                      {itakQr ? <QRCodeSVG value={itakQr} size={240} level="M" /> : <p>Geen iTAK QR ontvangen.</p>}
-                      <div className="game-itak-help">
-                        <p><strong>QR op een ander scherm?</strong><br />Scan deze QR met iTAK.</p>
-                        <p><strong>Portal op dezelfde iPhone?</strong><br />Voeg de server handmatig toe:</p>
-                        <dl>
-                          <div><dt>Server</dt><dd>atak.3division.eu</dd></div>
-                          <div><dt>Poort</dt><dd>8089</dd></div>
-                          <div><dt>Beveiliging</dt><dd>SSL</dd></div>
-                        </dl>
-                        <p>Gebruik daarna de tijdelijke gebruikersnaam en het wachtwoord hierboven.</p>
+
+                      <div className="game-itak-step">
+                        <h4>1. Stel Team ${TEAM_LABELS[team.team]} in</h4>
+                        {itakTeamProfileQr ? (
+                          <>
+                            <QRCodeSVG value={itakTeamProfileQr} size={190} level="M" />
+                            <p>Scan eerst deze QR met iTAK. Deze importeert alleen de teamkleur <strong>{team.teamColor}</strong> en de rol <strong>Team Member</strong>; er staan geen credentials in.</p>
+                            <a className="game-itak-link" href={itakTeamProfileQr}>Open teaminstelling op deze iPhone</a>
+                          </>
+                        ) : (
+                          <p>Geen iTAK-teamprofiel beschikbaar.</p>
+                        )}
+                      </div>
+
+                      <div className="game-itak-step">
+                        <h4>2. Verbind met de TAK-server</h4>
+                        {itakQr ? <QRCodeSVG value={itakQr} size={240} level="M" /> : <p>Geen iTAK QR ontvangen.</p>}
+                        <div className="game-itak-help">
+                          <p><strong>QR op een ander scherm?</strong><br />Scan deze QR daarna met iTAK.</p>
+                          <p><strong>Portal op dezelfde iPhone?</strong><br />Voeg de server handmatig toe:</p>
+                          <dl>
+                            <div><dt>Server</dt><dd>atak.3division.eu</dd></div>
+                            <div><dt>Poort</dt><dd>8089</dd></div>
+                            <div><dt>Beveiliging</dt><dd>SSL</dd></div>
+                          </dl>
+                          <p>Gebruik daarna de tijdelijke gebruikersnaam en het wachtwoord hierboven.</p>
+                        </div>
                       </div>
                     </div>
                   </div>
