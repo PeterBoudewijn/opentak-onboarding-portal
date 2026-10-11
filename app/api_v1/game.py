@@ -225,9 +225,26 @@ def _group_members(group_name):
     return members if isinstance(members, list) else []
 
 
+def _permanent_team_users(team_key):
+    """Return explicitly configured OTS users allowed to stay in a game group."""
+    config_key = (
+        "GAME_PERMANENT_USERS_RED"
+        if team_key == "red"
+        else "GAME_PERMANENT_USERS_BLUE"
+    )
+    configured = current_app.config.get(config_key, [])
+    if isinstance(configured, str):
+        configured = [value.strip() for value in configured.split(",") if value.strip()]
+    return {str(username).strip() for username in configured if str(username).strip()}
+
+
 def _enforce_reserved_team_group(team_key, allowed_username=None):
-    """Keep GameRed/GameBlue reserved for the current temporary game user only."""
+    """Keep reserved groups limited to the current session and permanent allowlist."""
     group_name = GAME_TEAMS[team_key]["group"]
+    allowed_usernames = _permanent_team_users(team_key)
+    if allowed_username:
+        allowed_usernames.add(allowed_username)
+
     removed = []
 
     for member in _group_members(group_name):
@@ -238,7 +255,7 @@ def _enforce_reserved_team_group(team_key, allowed_username=None):
             username = str(member)
             direction = None
 
-        if not username or username == allowed_username:
+        if not username or username in allowed_usernames:
             continue
 
         directions = [direction] if direction in ("IN", "OUT") else ["IN", "OUT"]
@@ -277,8 +294,8 @@ def _ensure_team_isolation(team_key, username):
         _safe_remove_membership(username, group_name, direction)
         otsClient.add_user_to_group(username, group_name, direction)
 
-    # Game team groups are reserved. A normal OTS user must never be able to
-    # publish into or subscribe to the live game team by sharing this group.
+    # Game team groups are reserved for the current temporary session plus
+    # explicitly configured permanent OTS users.
     _enforce_reserved_team_group(team_key, username)
 
 
@@ -410,6 +427,7 @@ def _team_status(team_key):
         "euds": euds,
         "profileSync": profile_sync,
         "outsidersRemoved": outsiders_removed,
+        "permanentUsers": sorted(_permanent_team_users(team_key)),
         "expiresAt": current.get("expiresAt") if current else None,
         "activeSession": bool(current),
         "hardEudDeleteAvailable": False,
