@@ -168,11 +168,29 @@ function GroupsList() {
 
   const allUsers = usersData?.users || [];
 
-  // Build display list: current members first, then filtered non-members
+  // Build display list: current members first, then filtered non-members.
+  // OTS group members do not necessarily exist as local portal users (for example
+  // the temporary GameRed_xxxxxxxx / GameBlue_xxxxxxxx session accounts), so
+  // include those live OTS-only members explicitly.
   const displayUsers = useMemo(() => {
-    const currentMembers = allUsers
-      .filter(u => memberMap[u.username])
-      .map(u => ({ ...u, isMember: true, direction: memberMap[u.username].direction }));
+    const localByUsername = Object.fromEntries(
+      allUsers.filter(u => u.username).map(u => [u.username, u])
+    );
+
+    const currentMembers = Object.values(memberMap).map(member => {
+      const local = localByUsername[member.username];
+      return local
+        ? { ...local, localUserId: local.id, isMember: true, direction: member.direction }
+        : {
+            id: `ots:${member.username}`,
+            username: member.username,
+            callsign: member.callsign || null,
+            localUserId: member.localUserId || null,
+            isMember: true,
+            isOtsOnly: true,
+            direction: member.direction,
+          };
+    });
 
     const searchLower = memberSearch.toLowerCase();
     const nonMembers = memberSearch
@@ -199,7 +217,10 @@ function GroupsList() {
   };
 
   const handleDirectionChange = (user, newDirection) => {
-    addMemberMutation.mutate({ userId: user.id, direction: newDirection });
+    const data = user.localUserId
+      ? { userId: user.localUserId, direction: newDirection }
+      : { username: user.username, direction: newDirection };
+    addMemberMutation.mutate(data);
   };
 
   if (isLoading) return <div className="admin-page"><div className="loading-state">{t('common.loading')}</div></div>;
