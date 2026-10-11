@@ -423,7 +423,7 @@ def _team_status(team_key):
 def _itak_team_profile_urls(team_key):
     """Build the public iTAK team-profile URL and import deep link."""
     base_url = (current_app.config.get("FRONTEND_URL") or request.url_root).rstrip("/")
-    profile_url = f"{base_url}/api/v1/game/team-profile/{team_key}.zip"
+    profile_url = f"{base_url}/api/v1/game/team-profile/{team_key}.zip?v=2"
     import_uri = "tak://com.atakmap.app/import?url=" + quote(profile_url, safe="")
     return profile_url, import_uri
 
@@ -471,7 +471,7 @@ def itak_team_profile(team_key):
         as_attachment=True,
         download_name=f"{team['label']}_iTAK_team.zip",
     )
-    response.headers["Cache-Control"] = "public, max-age=3600"
+    response.headers["Cache-Control"] = "no-store, max-age=0"
     return response
 
 
