@@ -159,10 +159,19 @@ function Game() {
                       <h3>ATAK</h3>
                       {atakQr ? <QRCodeSVG value={atakQr} size={220} level="M" /> : <p>Geen ATAK QR ontvangen.</p>}
                     </div>
-                    <div className="game-qr">
-                      <h3>iTAK</h3>
-                      {itakQr ? <QRCodeSVG value={itakQr} size={220} level="M" /> : <p>Geen iTAK QR ontvangen.</p>}
-                      <small>iTAK gebruikt daarnaast bovenstaande gebruikersnaam en wachtwoord.</small>
+                    <div className="game-qr game-itak-qr">
+                      <h3>iPhone / iTAK</h3>
+                      {itakQr ? <QRCodeSVG value={itakQr} size={240} level="M" /> : <p>Geen iTAK QR ontvangen.</p>}
+                      <div className="game-itak-help">
+                        <p><strong>QR op een ander scherm?</strong><br />Scan deze QR met iTAK.</p>
+                        <p><strong>Portal op dezelfde iPhone?</strong><br />Voeg de server handmatig toe:</p>
+                        <dl>
+                          <div><dt>Server</dt><dd>atak.3division.eu</dd></div>
+                          <div><dt>Poort</dt><dd>8089</dd></div>
+                          <div><dt>Beveiliging</dt><dd>SSL</dd></div>
+                        </dl>
+                        <p>Gebruik daarna de tijdelijke gebruikersnaam en het wachtwoord hierboven.</p>
+                      </div>
                     </div>
                   </div>
 
