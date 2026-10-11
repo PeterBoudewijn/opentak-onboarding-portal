@@ -133,12 +133,15 @@ def _ensure_team_isolation(team_key):
 
     _ensure_group_exists(group_name)
 
-    # Remove cross-team membership first.
-    for other_key, other in GAME_TEAMS.items():
-        if other_key == team_key:
+    # Remove every membership except the team's own group. This prevents
+    # accidental visibility through __ANON__ or an unrelated OTS group.
+    groups_response = otsClient.get_groups(page=1, page_size=500)
+    for group in _response_results(groups_response):
+        existing_group = group.get("name")
+        if not existing_group or existing_group == group_name:
             continue
         for direction in ("IN", "OUT"):
-            _safe_remove_membership(username, other["group"], direction)
+            _safe_remove_membership(username, existing_group, direction)
 
     # Rebuild the desired memberships so stale direction state cannot survive.
     for direction in ("IN", "OUT"):
