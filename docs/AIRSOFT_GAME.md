@@ -2,23 +2,30 @@
 
 This fork adds an Airsoft Game page on top of the existing OpenTAK Onboarding Portal.
 
-## Fixed game accounts
+## Logical teams and per-session OTS accounts
 
-The game mode expects two existing OpenTAKServer accounts:
+The fixed game identities are:
 
-- `GameRed`
-- `GameBlue`
+- `GameRed` (logical label and OTS group)
+- `GameBlue` (logical label and OTS group)
 
-The portal does not delete these accounts.
+For certificate safety the portal does **not** reuse one permanent OTS login for each team. Each time **Nieuwe toegang genereren** is used, the portal creates a unique temporary OTS username such as:
+
+- `GameRed_a3f91c2d`
+- `GameBlue_54b8d910`
+
+That temporary account is what ATAK/iTAK use for the game session.
+
+This is intentional. OpenTAKServer 1.7.13 authenticates an SSL client certificate by certificate common name and does not enforce its generated CRL in the SSL EUD handler. Reusing the same username after reactivation could therefore make an old certificate useful again. A unique account per game session avoids that: once a session account is deactivated it is never reactivated.
 
 ## Isolation
 
-Before generating access, the portal enforces exclusive OTS group membership:
+Before access is returned, the temporary account is placed exclusively in its team group:
 
-- `GameRed` -> `GameRed` group, IN + OUT only
-- `GameBlue` -> `GameBlue` group, IN + OUT only
+- red session account -> `GameRed` group, IN + OUT only
+- blue session account -> `GameBlue` group, IN + OUT only
 
-All other group memberships for the relevant game account are removed. This is the security boundary that keeps the red and blue data streams separated.
+All other OTS group memberships for the session account are removed. This is the primary security boundary between teams.
 
 ## Portal roles
 
@@ -27,54 +34,52 @@ Two local, non-admin portal roles are seeded:
 - `game_red_leader`
 - `game_blue_leader`
 
-Assign these roles to the OTS-backed portal accounts used by the game leaders.
-
-A red leader can only request/status the red game account. A blue leader can only request/status the blue game account. The existing `administrator` role can see both and can run cleanup actions.
+A red game leader only sees/generates red access. A blue game leader only sees/generates blue access. The existing `administrator` role can see and clean up both teams.
 
 ## Generating game access
 
-The **Nieuwe toegang genereren** action:
+**Nieuwe toegang genereren**:
 
-1. verifies the OTS group isolation;
-2. activates the selected shared game account;
-3. generates a new random password and sets it in OTS;
-4. invalidates the previous ATAK enrollment token;
-5. creates a new ATAK QR enrollment token;
-6. obtains the iTAK QR connection string;
-7. returns the temporary password once to the browser.
+1. permanently closes the previous active session account for that team, if any;
+2. creates a new unique OTS user;
+3. gives it only the correct team group membership (IN + OUT);
+4. generates a random password;
+5. creates a new ATAK enrollment token;
+6. returns the iTAK connection QR string;
+7. returns the temporary username/password to the browser;
+8. records the session account locally for later cutoff/cleanup.
 
 The ATAK token expires at the earliest of:
 
 - the next 23:00 in `Europe/Amsterdam`; or
 - exactly 24 real hours after generation.
 
-The 24-hour cap is calculated on the UTC timeline so it remains correct across DST transitions.
-
-The default maximum ATAK token usage count is 250. It can be changed with Flask config key `GAME_QR_MAX_USES`.
+The 24-hour cap is calculated on the UTC timeline so DST fallback can never create a 25-hour credential.
 
 ## Team colors
 
-For discovered EUDs associated with the shared account, the portal writes OTS Device Profiles:
+For discovered EUDs belonging to a red or blue session account, the portal writes OTS Device Profiles:
 
-- `GameRed`: `locationTeam = Red`
-- `GameBlue`: `locationTeam = Blue`
+- Red: `locationTeam = Red`
+- Blue: `locationTeam = Blue`
 - both: `atakRoleType = Team Member`
 
-The game page refreshes status every 30 seconds so newly discovered EUDs receive the appropriate per-EUD connection profile.
+The game page refreshes status every 30 seconds so new EUDs can receive the appropriate per-EUD connection profile.
 
-Important: an EUD has to exist in OTS before a per-EUD Device Profile can be attached. The OTS group separation is therefore the hard isolation control; color is a configuration/display setting.
+Group membership, not color, is the team security boundary.
 
 ## 23:00 cutoff
 
-At 23:00 `Europe/Amsterdam`, the portal scheduler performs a credential cutoff for both teams:
+At 23:00 `Europe/Amsterdam`, the current session account for each team is:
 
-- invalidate the ATAK QR token;
-- rotate the shared account password;
-- deactivate `GameRed` / `GameBlue`.
+- stripped of usable ATAK enrollment access;
+- assigned a new random password;
+- deactivated;
+- marked closed in the portal state.
 
-The accounts and groups remain present for the next game.
+That account is never reactivated. The next game receives a newly generated username.
 
-A client that is already connected may remain connected until its current OTS socket is closed. Deactivation prevents a new authenticated connection. Hard socket termination requires an OTS-side helper because OTS does not expose a supported public API for disconnecting an individual EUD.
+A client that was already connected at 23:00 may keep its existing socket until it disconnects or the OTS EUD service closes it. A deactivated session account cannot establish a new authenticated connection. Hard live-socket termination requires an OTS-side helper.
 
 ## Manual administrator cleanup
 
@@ -84,21 +89,22 @@ Administrators get:
 - **Wis Team Blauw**
 - **Wis alle game-toegang**
 
-The current implementation revokes credentials and deactivates the relevant shared account(s).
+Cleanup permanently deactivates every tracked, still-open session account for the selected team(s).
 
-### EUD deletion limitation
+## Historic EUD deletion
 
-Current OpenTAKServer exposes `GET /api/eud`, but no supported `DELETE /api/eud` endpoint. For that reason this fork deliberately does **not** directly edit the OTS database.
+OpenTAKServer exposes `GET /api/eud`, but no supported `DELETE /api/eud` endpoint. This fork therefore does not directly modify the OTS database.
 
-The admin page clearly reports this limitation. Physical deletion of historic EUD rows/certificates should be implemented as a small OTS-side helper after it is verified against the exact OTS version installed on the production server.
+Historic EUD records can remain until an admin cleanup/helper removes them. Security does not depend on deleting them because their session OTS usernames are permanently deactivated and never reused.
 
 ## Recommended first deployment
 
-1. Install the upstream onboarding portal/fork normally.
-2. Confirm the portal can log in to OTS with an administrator API account.
-3. Create/confirm `GameRed` and `GameBlue` in OTS.
-4. Log in to the portal once as the intended game leader accounts so they exist locally.
-5. Assign `game_red_leader` and `game_blue_leader` using the portal Roles page.
-6. Test group isolation with two test devices before production use.
-7. Test the 23:00 cutoff and reconnect behaviour.
-8. Only after that add the optional OTS-side hard EUD cleanup helper.
+1. Install this feature branch on a separate local portal port (127.0.0.1:5000).
+2. Connect it to OTS with an OTS administrator API account.
+3. Assign the local portal roles `game_red_leader` and `game_blue_leader` to the intended game leader portal users.
+4. Generate one red and one blue test session.
+5. Verify OTS groups contain only the expected IN/OUT membership.
+6. Enroll two test devices and verify cross-team isolation.
+7. Verify the per-EUD team colors.
+8. Test deactivation/reconnect behaviour.
+9. Only then add the optional OTS-side hard EUD/socket cleanup helper.
