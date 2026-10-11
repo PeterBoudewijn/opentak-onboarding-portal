@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
-"""Apply the Airsoft GameRed/GameBlue team-color override to OpenTAKServer 1.7.13.
+"""Patch OpenTAKServer 1.7.13 for isolated Airsoft game teams.
 
 Run with the Python interpreter from the OpenTAKServer 1.7.13 virtualenv.
-The script supports both a clean OTS 1.7.13 install and repairing the earlier
-V1 version of this patch.
 
-Only authenticated users with an enabled IN membership in exactly one
-reserved group are changed:
-  GameRed  -> __group name="Red",  role="Team Member"
-  GameBlue -> __group name="Blue", role="Team Member"
+For authenticated users in exactly one reserved IN group:
+  GameRed  -> outgoing __group name="Red",  role="Team Member"
+  GameBlue -> outgoing __group name="Blue", role="Team Member"
+
+V3 also fixes device-UID reuse. OTS normally reuses the RabbitMQ UID queue,
+which can retain bindings from a previous account/team. For a game account,
+the UID queue is deleted and recreated before current group bindings are
+applied. This removes stale GameRed/GameBlue/__ANON__/normal-group bindings.
+
+All non-game accounts keep the original OTS behavior.
 """
 
 from __future__ import annotations
@@ -22,6 +26,7 @@ from pathlib import Path
 
 MARKER_V1 = "# AIRSOFT_GAME_TEAM_OVERRIDE_V1"
 MARKER_V2 = "# AIRSOFT_GAME_TEAM_OVERRIDE_V2"
+MARKER_V3 = "# AIRSOFT_GAME_TEAM_OVERRIDE_V3"
 
 V1_LATE_INIT = """        # Per-connection state for the game-only team override.
         self.airsoft_game_team = None
@@ -43,7 +48,7 @@ SETUP_NEW = """    def setup(self):
 HELPER_ANCHOR = """    def handle_cot(self, cot):
 """
 
-HELPER = """    # AIRSOFT_GAME_TEAM_OVERRIDE_V2
+HELPER_V3 = """    # AIRSOFT_GAME_TEAM_OVERRIDE_V3
     def _apply_airsoft_game_team(self, event):
         \"\"\"Force reserved game accounts to publish the configured team color.\"\"\"
         if not event or not self.is_ssl or not self.user:
@@ -76,7 +81,6 @@ HELPER = """    # AIRSOFT_GAME_TEAM_OVERRIDE_V2
                     "GameRed": "Red",
                     "GameBlue": "Blue",
                 }[reserved[0]]
-                # WARNING is deliberate: visible even when OTS INFO logging is filtered.
                 self.logger.warning(
                     "Airsoft game team override for %s: %s",
                     self.user.username,
@@ -123,6 +127,35 @@ CALL_NEW = """        if self.pong(event):
         if event and not self.uid:
 """
 
+QUEUE_OLD = """                    self.rabbit_channel.queue_declare(queue=self.callsign)
+                    self.rabbit_channel.queue_declare(queue=self.uid)
+
+                    with self.app.app_context():
+"""
+
+QUEUE_NEW = """                    self.rabbit_channel.queue_declare(queue=self.callsign)
+
+                    # A physical device can move from a normal account to a game
+                    # account, or from GameRed to GameBlue, while keeping the same
+                    # TAK UID. RabbitMQ queues survive that switch and therefore
+                    # retain old bindings. For game users, recreate only the UID
+                    # queue before applying the current OTS OUT memberships.
+                    if self.airsoft_game_team:
+                        self.logger.warning(
+                            "Resetting stale group bindings for game EUD %s (%s)",
+                            self.uid,
+                            self.user.username,
+                        )
+                        # Declare first so queue_delete cannot fail because a new
+                        # device has no pre-existing queue.
+                        self.rabbit_channel.queue_declare(queue=self.uid)
+                        self.rabbit_channel.queue_delete(queue=self.uid)
+
+                    self.rabbit_channel.queue_declare(queue=self.uid)
+
+                    with self.app.app_context():
+"""
+
 
 def locate_target() -> Path:
     spec = importlib.util.find_spec("opentakserver.eud_handler.EudHandler")
@@ -134,33 +167,29 @@ def locate_target() -> Path:
     return Path(spec.origin).resolve()
 
 
-def patch_fresh(source: str) -> str:
-    if SETUP_OLD not in source:
-        raise RuntimeError("Expected OTS 1.7.13 setup() pattern not found.")
-    if HELPER_ANCHOR not in source:
-        raise RuntimeError("Expected OTS 1.7.13 handle_cot() pattern not found.")
-    if CALL_OLD not in source:
-        raise RuntimeError("Expected OTS 1.7.13 handle_cot call site not found.")
+def install_core(source: str) -> str:
+    if SETUP_NEW not in source:
+        if SETUP_OLD not in source:
+            raise RuntimeError("Expected OTS 1.7.13 setup() pattern not found.")
+        source = source.replace(SETUP_OLD, SETUP_NEW, 1)
 
-    source = source.replace(SETUP_OLD, SETUP_NEW, 1)
-    source = source.replace(HELPER_ANCHOR, HELPER + HELPER_ANCHOR, 1)
-    source = source.replace(CALL_OLD, CALL_NEW, 1)
+    if "_apply_airsoft_game_team" not in source:
+        if HELPER_ANCHOR not in source:
+            raise RuntimeError("Expected OTS 1.7.13 handle_cot() pattern not found.")
+        source = source.replace(HELPER_ANCHOR, HELPER_V3 + HELPER_ANCHOR, 1)
+
+    if "self._apply_airsoft_game_team(event)" not in source:
+        if CALL_OLD not in source:
+            raise RuntimeError("Expected OTS 1.7.13 handle_cot call site not found.")
+        source = source.replace(CALL_OLD, CALL_NEW, 1)
+
     return source
 
 
-def repair_v1(source: str) -> str:
-    # V1 put these instance attributes after super().__init__(), but
-    # BaseRequestHandler has already run handle() by then. Remove that late init.
+def upgrade_marker_and_logging(source: str) -> str:
     source = source.replace(V1_LATE_INIT, "", 1)
-
-    if SETUP_NEW not in source:
-        if SETUP_OLD not in source:
-            raise RuntimeError("Could not find setup() while repairing V1 patch.")
-        source = source.replace(SETUP_OLD, SETUP_NEW, 1)
-
-    # Keep the already-installed helper/call, but upgrade its marker and make
-    # the successful override visible at WARNING level.
-    source = source.replace(MARKER_V1, MARKER_V2, 1)
+    source = source.replace(MARKER_V1, MARKER_V3, 1)
+    source = source.replace(MARKER_V2, MARKER_V3, 1)
     source = source.replace(
         '                self.logger.info(\n                    "Airsoft game team override for %s: %s",',
         '                self.logger.warning(\n                    "Airsoft game team override for %s: %s",',
@@ -169,21 +198,37 @@ def repair_v1(source: str) -> str:
     return source
 
 
+def install_queue_reset(source: str) -> str:
+    if "Resetting stale group bindings for game EUD" in source:
+        return source
+    if QUEUE_OLD not in source:
+        raise RuntimeError(
+            "Expected OTS 1.7.13 UID queue declaration block not found. "
+            "Refusing to modify the file."
+        )
+    return source.replace(QUEUE_OLD, QUEUE_NEW, 1)
+
+
 def main() -> int:
     target = locate_target()
     source = target.read_text(encoding="utf-8")
     print(f"Target: {target}")
 
-    if MARKER_V2 in source:
-        print("V2 patch is already installed; no changes made.")
+    if MARKER_V3 in source and "Resetting stale group bindings for game EUD" in source:
+        print("V3 patch is already installed; no changes made.")
         return 0
 
-    if MARKER_V1 in source:
-        patched = repair_v1(source)
-        action = "Repaired V1 -> V2"
-    else:
-        patched = patch_fresh(source)
-        action = "Installed V2"
+    had_v1 = MARKER_V1 in source
+    had_v2 = MARKER_V2 in source
+
+    patched = install_core(source)
+    patched = upgrade_marker_and_logging(patched)
+    patched = install_queue_reset(patched)
+
+    # A fresh install_core() inserted the V3 marker already. Older installs are
+    # upgraded above.
+    if MARKER_V3 not in patched:
+        raise RuntimeError("V3 marker missing after patch construction.")
 
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     backup = target.with_name(target.name + f".bak-airsoft-team-{stamp}")
@@ -196,9 +241,16 @@ def main() -> int:
         shutil.copy2(backup, target)
         raise
 
+    if had_v2:
+        action = "Upgraded V2 -> V3"
+    elif had_v1:
+        action = "Upgraded V1 -> V3"
+    else:
+        action = "Installed V3"
+
     print(f"Backup: {backup}")
     print(f"{action}; Python compile check passed.")
-    print("Restart opentakserver-1713.service to activate it.")
+    print("Restart opentakserver-1713.service and reconnect game devices.")
     return 0
 
 
