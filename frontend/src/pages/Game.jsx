@@ -119,13 +119,13 @@ function Game() {
           const generated = access[team.team];
           const atakQr = generated?.atak?.qrString;
           const itakQr = generated?.itak?.qrString;
-          const expiresAt = generated?.expiresAt || team.nextCutoff;
+          const expiresAt = generated?.expiresAt || team.expiresAt;
           return (
             <section key={team.team} className={`game-card game-card-${team.team}`}>
               <div className="game-card-title">
                 <div>
                   <span className="game-team-badge">TEAM {TEAM_LABELS[team.team]?.toUpperCase()}</span>
-                  <h2>{team.username}</h2>
+                  <h2>{team.accountLabel || (team.team === 'red' ? 'GameRed' : 'GameBlue')}</h2>
                 </div>
                 <div className="game-count">{team.eudCount ?? 0} EUD's</div>
               </div>
@@ -178,7 +178,7 @@ function Game() {
                     {busy === `cleanup-${team.team}` ? 'Afsluiten...' : `Wis Team ${TEAM_LABELS[team.team]}`}
                   </button>
                   <p className="game-warning">
-                    Deze actie trekt credentials in en deactiveert {team.username}. OTS heeft geen ondersteunde DELETE /api/eud-route; historische EUD-records worden daarom nog niet fysiek verwijderd.
+                    Deze actie trekt de tijdelijke gamecredentials in en deactiveert alle nog actieve sessieaccounts voor dit team. Historische EUD-records blijven in OTS staan, maar hun unieke sessieaccounts worden nooit opnieuw geactiveerd.
                   </p>
                 </div>
               )}
