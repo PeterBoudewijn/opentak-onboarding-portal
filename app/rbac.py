@@ -20,6 +20,11 @@ from flask_jwt_extended import get_jwt_identity
 
 # Define admin roles with description and display name
 # Format: role_name: (description, display_name)
+GAME_ROLES = {
+    'game_red_leader': ('Access only to the red airsoft game portal', 'Game Leader Red'),
+    'game_blue_leader': ('Access only to the blue airsoft game portal', 'Game Leader Blue'),
+}
+
 ADMIN_ROLES = {
     'administrator': ('Full administrator access', 'Administrator'),
     'user_admin': ('Manage user accounts', 'User Admin'),
@@ -180,6 +185,16 @@ def seed_admin_roles(db, UserRoleModel):
                 existing.display_name = display_name
                 db.session.commit()
                 print(f"Updated admin role display_name: {role_name}")
+
+        # Seed game leader roles. These are intentionally NOT admin roles.
+        for role_name, (description, display_name) in GAME_ROLES.items():
+            existing = UserRoleModel.get_role_by_name(role_name)
+            if not existing:
+                UserRoleModel.create_role(role_name, description, display_name)
+                print(f"Created game role: {role_name}")
+            elif existing and not getattr(existing, 'display_name', None):
+                existing.display_name = display_name
+                db.session.commit()
 
         # Update any other roles (e.g., OTS-created) that don't have display names
         all_roles = UserRoleModel.get_all_roles()
