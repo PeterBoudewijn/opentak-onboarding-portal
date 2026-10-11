@@ -16,7 +16,7 @@ Security model:
   here because OpenTAKServer does not expose a supported DELETE /api/eud API.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 import secrets
 import string
@@ -64,8 +64,10 @@ def _next_cutoff(now=None):
     if now >= cutoff:
         cutoff += timedelta(days=1)
 
-    hard_limit = now + timedelta(hours=24)
-    return min(cutoff, hard_limit)
+    # Compute the 24-hour cap on the UTC timeline. Local-time arithmetic can
+    # otherwise last 25 real hours across the autumn DST transition.
+    hard_limit = (now.astimezone(timezone.utc) + timedelta(hours=24)).astimezone(GAME_TZ)
+    return cutoff if cutoff.timestamp() <= hard_limit.timestamp() else hard_limit
 
 
 def _response_payload(response):
