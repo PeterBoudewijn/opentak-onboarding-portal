@@ -11,7 +11,7 @@ import './Layout.css';
 
 function Layout() {
   const { t } = useTranslation();
-  const { user, logout, hasAnyAdminRole, hasModuleAccess, approverStatus, impersonating, stopImpersonation } = useAuth();
+  const { user, logout, hasRole, hasAnyAdminRole, hasModuleAccess, approverStatus, impersonating, stopImpersonation } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
@@ -106,6 +106,10 @@ function Layout() {
             {t('layout.homepage')}
           </Link>
 
+          {(hasRole('game_red_leader') || hasRole('game_blue_leader') || hasRole('administrator')) && (
+            <Link to="/game" className="nav-link">Airsoft Game</Link>
+          )}
+
           {approverStatus?.isApprover && (
             <Link to="/approvals" className="nav-link approvals-link">
               {t('layout.approvals')}
@@ -125,6 +129,7 @@ function Layout() {
               </span>
               <div className="dropdown-content">
                 <Link to="/admin">{t('layout.adminOverview')}</Link>
+                {hasRole('administrator') && <Link to="/game">Airsoft Game</Link>}
                 {hasModuleAccess('users') && <Link to="/admin/users">{t('layout.users')}</Link>}
                 {hasModuleAccess('roles') && <Link to="/admin/roles">{t('layout.roles')}</Link>}
                 {hasModuleAccess('groups') && <Link to="/admin/groups">{t('layout.otsGroups')}</Link>}
