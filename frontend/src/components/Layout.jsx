@@ -39,7 +39,7 @@ function Layout() {
 
   useEffect(() => {
     // Fetch version info
-    fetch('/version.json')
+    fetch(`${import.meta.env.BASE_URL}version.json`)
       .then(res => res.json())
       .then(data => setVersion(data))
       .catch(() => setVersion({ commit: 'dev', date: 'unknown' }));
