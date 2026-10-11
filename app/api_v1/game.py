@@ -49,7 +49,7 @@ _STATE_LOCK = threading.Lock()
 
 
 def _random_password(length=24):
-    alphabet = string.ascii_letters + string.digits + "!@#$%*_"
+    alphabet = string.ascii_letters + string.digits + "!#$%*_"
     return "".join(secrets.choice(alphabet) for _ in range(length))
 
 
