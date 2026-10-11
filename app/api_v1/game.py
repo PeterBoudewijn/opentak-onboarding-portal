@@ -55,30 +55,27 @@ def _random_password(length=24):
 
 
 GAME_PASSWORD_WORDS = (
-    "Anker", "Appel", "Baken", "Berg", "Berk", "Blad", "Bliksem", "Bloem",
-    "Brug", "Dennen", "Dolfijn", "Duin", "Egel", "Eiland", "Fakkel", "Fiets",
-    "Fluit", "Golf", "Gras", "Hamer", "Haven", "Helm", "Hert", "Horizon",
-    "IJs", "Jager", "Kano", "Kasteel", "Kever", "Kiezel", "Klok", "Komeet",
-    "Kompas", "Kraan", "Leeuw", "Linde", "Maan", "Meer", "Molen", "Mossel",
-    "Munt", "Nacht", "Noot", "Oever", "Otter", "Paal", "Pad", "Parel",
-    "Pinguin", "Planeet", "Reiger", "Rivier", "Rots", "Sabel", "Schip", "Sleutel",
-    "Sneeuw", "Ster", "Strand", "Toren", "Trein", "Valk", "Veld", "Vis",
-    "Vlam", "Vogel", "Vos", "Water", "Wolk", "Zand", "Zee", "Zon",
-    "Bizon", "Ceder", "Delta", "Fjord", "Gans", "Hazel", "Ibis", "Koraal",
-    "Lantaarn", "Mango", "Nectar", "Oase", "Panda", "Radar", "Spar", "Tulp",
-    "Vlier", "Walvis", "Zeil", "Aster", "Bamboe", "Cactus", "Dageraad", "Eik",
-    "Fenix", "Gieter", "Havik", "Inkt", "Jasmijn", "Kajak", "Lepel", "Mammoet",
-    "Nova", "Olijf", "Pelikaan", "Quartz", "Roos", "Saturnus", "Tijger", "Uil",
-    "Veer", "Wind", "Yeti", "Zebra", "Amber", "Bonsai", "Cirkel", "Donder",
-    "Esdoorn", "Fakkel", "Gletsjer", "Klavertje", "Limoen", "Marmer", "Nevel", "Orion",
+    "anker", "appel", "berg", "berk", "blad", "bloem", "brug", "duin",
+    "egel", "eiland", "fiets", "golf", "gras", "hamer", "haven", "helm",
+    "hert", "kano", "kever", "kiezel", "klok", "kompas", "kraan", "leeuw",
+    "linde", "maan", "meer", "molen", "munt", "nacht", "noot", "oever",
+    "otter", "paal", "pad", "parel", "reiger", "rivier", "rots", "sabel",
+    "schip", "sleutel", "sneeuw", "ster", "strand", "toren", "trein", "valk",
+    "veld", "vis", "vlam", "vogel", "vos", "water", "wolk", "zand",
+    "zee", "zon", "bizon", "ceder", "delta", "gans", "ibis", "koraal",
+    "mango", "oase", "panda", "radar", "spar", "tulp", "vlier", "walvis",
+    "zeil", "aster", "bamboe", "cactus", "eik", "fenix", "havik", "inkt",
+    "kajak", "lepel", "nova", "olijf", "roos", "tijger", "uil", "veer",
+    "wind", "zebra", "amber", "bonsai", "cirkel", "donder", "limoen", "marmer",
 )
 
 
 def _human_game_password():
-    """Readable temporary password for manual entry on iPhone/iTAK."""
-    words = [secrets.choice(GAME_PASSWORD_WORDS) for _ in range(3)]
-    number = secrets.randbelow(900) + 100
-    return "-".join(words + [str(number)])
+    """Easy temporary password for manual entry on iPhone/iTAK."""
+    first = secrets.choice(GAME_PASSWORD_WORDS)
+    second = secrets.choice(GAME_PASSWORD_WORDS)
+    number = secrets.randbelow(9000) + 1000
+    return f"{first}-{second}-{number}"
 
 
 def _new_session_username(team_key):
