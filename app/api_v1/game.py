@@ -490,6 +490,25 @@ def _revoke_session_credentials(team_key, session, reason):
 
     euds = _get_user_euds(username)
 
+    # The state file can still reference a session whose OTS user was already
+    # deleted by a previous cleanup or manually. Treat that as successfully
+    # closed instead of blocking generation of the next game session.
+    if not _ots_user_exists(username):
+        for direction in ("IN", "OUT"):
+            _safe_remove_membership(username, GAME_TEAMS[team_key]["group"], direction)
+        _mark_session_closed(team_key, username, reason)
+        _mark_session_delete_state(team_key, username, deleted=True)
+        return {
+            "username": username,
+            "eudCount": len(euds),
+            "euds": euds,
+            "credentialsRevoked": True,
+            "accountDeactivated": True,
+            "userDeleted": True,
+            "deletionPending": False,
+            "deleteReason": "already_missing",
+        }
+
     try:
         otsClient.delete_atak_qr_string(username)
     except Exception:
