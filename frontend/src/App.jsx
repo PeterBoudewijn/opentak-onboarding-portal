@@ -172,7 +172,7 @@ function AppContent() {
         <DocumentTitle />
         <Notifications />
         <AuthProvider>
-          <Router>
+          <Router basename={import.meta.env.BASE_URL.replace(/\/$/, '') || '/'}>
           <Routes>
             {/* Public routes */}
             <Route
