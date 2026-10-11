@@ -253,7 +253,7 @@ class OTSClient:
         if page is not None:
             params["page"] = page
         if page_size is not None:
-            params["page_size"] = page_size
+            params["per_page"] = page_size
         if name is not None:
             params["name"] = name
         if active is not None:
