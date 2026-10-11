@@ -40,8 +40,3 @@
 .game-itak-help dt { color: #555; }
 .game-itak-help dd { margin: 0; font-weight: 700; }
 
-.game-itak-step { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #ddd; }
-.game-itak-step:first-of-type { margin-top: .5rem; }
-.game-itak-step h4 { margin: 0 0 .75rem; }
-.game-itak-step p { font-size: .9rem; line-height: 1.4; }
-.game-itak-link { display: inline-block; margin-top: .35rem; padding: .65rem .85rem; border-radius: 8px; background: #222; color: #fff; text-decoration: none; font-weight: 700; }
