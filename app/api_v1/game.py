@@ -15,13 +15,16 @@ Security model:
 
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
+import io
 import json
 import os
 import secrets
 import string
 import threading
+import zipfile
+from urllib.parse import quote
 
-from flask import current_app, jsonify, request
+from flask import current_app, jsonify, request, send_file
 from flask_jwt_extended import jwt_required
 
 from app.api_v1 import api_v1
@@ -416,6 +419,45 @@ def _team_status(team_key):
     }
 
 
+def _itak_team_profile_urls(team_key):
+    """Build the public iTAK team-profile URL and import deep link."""
+    base_url = (current_app.config.get("FRONTEND_URL") or request.url_root).rstrip("/")
+    profile_url = f"{base_url}/api/v1/game/team-profile/{team_key}.zip"
+    import_uri = "tak://com.atakmap.app/import?url=" + quote(profile_url, safe="")
+    return profile_url, import_uri
+
+
+@api_v1.route("/game/team-profile/<team_key>.zip", methods=["GET"])
+def itak_team_profile(team_key):
+    """Public, credential-free iTAK package containing only team identity prefs."""
+    if team_key not in GAME_TEAMS:
+        return jsonify({"error": "Unknown game team"}), 404
+
+    team = GAME_TEAMS[team_key]
+    preferences = f"""<?xml version='1.0' standalone='yes'?>
+<preferences>
+  <preference version="1" name="com.atakmap.app_preferences">
+    <entry key="locationTeam" class="class java.lang.String">{team["team_color"]}</entry>
+    <entry key="atakRoleType" class="class java.lang.String">Team Member</entry>
+  </preference>
+</preferences>
+"""
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("config.pref", preferences)
+    buffer.seek(0)
+
+    response = send_file(
+        buffer,
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name=f"{team['label']}_iTAK_team.zip",
+    )
+    response.headers["Cache-Control"] = "public, max-age=3600"
+    return response
+
+
 @api_v1.route("/game/status", methods=["GET"])
 @jwt_required()
 def game_status():
@@ -525,6 +567,8 @@ def generate_game_access(team_key):
         }
         _record_session(team_key, session)
 
+        itak_team_profile_url, itak_team_profile_import_uri = _itak_team_profile_urls(team_key)
+
         return jsonify({
             "team": team_key,
             "accountLabel": team["label"],
@@ -540,6 +584,8 @@ def generate_game_access(team_key):
             "itak": {
                 "qrString": itak_string,
                 "expiresAt": expires_at,
+                "teamProfileUrl": itak_team_profile_url,
+                "teamProfileImportUri": itak_team_profile_import_uri,
             },
             "expiresAt": cutoff.isoformat(),
             "passwordShownOnce": True,
