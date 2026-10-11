@@ -78,9 +78,14 @@ def _human_game_password():
     return f"{first}-{second}-{number}"
 
 
+GAME_SESSION_ID_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"
+
+
 def _new_session_username(team_key):
-    # OpenTAKServer usernames allow letters, numbers, underscores and periods.
-    return f"{GAME_TEAMS[team_key]['label']}_{secrets.token_hex(4)}"
+    """Short, readable, collision-resistant temporary OTS username."""
+    prefix = "r" if team_key == "red" else "b"
+    suffix = "".join(secrets.choice(GAME_SESSION_ID_ALPHABET) for _ in range(6))
+    return f"{prefix}{suffix}"
 
 
 def _next_cutoff(now=None):
