@@ -21,6 +21,7 @@ import os
 import secrets
 import string
 import threading
+import uuid
 import zipfile
 from urllib.parse import quote
 
@@ -434,7 +435,7 @@ def itak_team_profile(team_key):
         return jsonify({"error": "Unknown game team"}), 404
 
     team = GAME_TEAMS[team_key]
-    preferences = f"""<?xml version='1.0' standalone='yes'?>
+    preferences = f"""<?xml version='1.0' encoding='UTF-8' standalone='yes'?>
 <preferences>
   <preference version="1" name="com.atakmap.app_preferences">
     <entry key="locationTeam" class="class java.lang.String">{team["team_color"]}</entry>
@@ -443,8 +444,24 @@ def itak_team_profile(team_key):
 </preferences>
 """
 
+    package_name = f"{team['label']}_iTAK_team"
+    manifest = f"""<MissionPackageManifest version="2">
+  <Configuration>
+    <Parameter name="uid" value="{uuid.uuid4()}"/>
+    <Parameter name="name" value="{package_name}"/>
+    <Parameter name="onReceiveDelete" value="true"/>
+  </Configuration>
+  <Contents>
+    <Content ignore="false" zipEntry="config.pref"/>
+  </Contents>
+</MissionPackageManifest>
+"""
+
     buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+    # iTAK-compatible mission package: root config.pref plus an explicit
+    # MANIFEST entry describing the preference file.
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_STORED) as archive:
+        archive.writestr("MANIFEST/manifest.xml", manifest)
         archive.writestr("config.pref", preferences)
     buffer.seek(0)
 
