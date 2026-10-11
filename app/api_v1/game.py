@@ -11,6 +11,7 @@ Security model:
 - Only the portal administrator can close all tracked sessions.
 - ATAK enrollment tokens expire at the next 23:00 Europe/Amsterdam,
   capped at 24 real hours.
+- Closed temporary OTS users are deleted after their EUDs have disconnected.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -140,6 +141,9 @@ def _load_state_unlocked():
         state["teams"].setdefault(team_key, {"current": None, "sessions": []})
         state["teams"][team_key].setdefault("current", None)
         state["teams"][team_key].setdefault("sessions", [])
+        for session in state["teams"][team_key]["sessions"]:
+            session.setdefault("deletedAt", None)
+            session.setdefault("deletePendingReason", None)
     return state
 
 
@@ -342,6 +346,114 @@ def _sync_team_color_profiles(team_key, username, euds=None):
     return {"synced": synced, "errors": errors}
 
 
+def _is_permanent_game_user(username):
+    if not username:
+        return False
+    return any(
+        username in _permanent_team_users(team_key)
+        for team_key in GAME_TEAMS
+    )
+
+
+def _ots_user_exists(username):
+    if not username:
+        return False
+    response = otsClient.get_users(username=username, page_size=100)
+    return any(
+        item.get("username") == username
+        for item in _response_results(response)
+        if isinstance(item, dict)
+    )
+
+
+def _mark_session_delete_state(team_key, username, deleted=False, reason=None):
+    with _STATE_LOCK:
+        state = _load_state_unlocked()
+        for session in state["teams"][team_key]["sessions"]:
+            if session.get("username") != username:
+                continue
+            if deleted:
+                session["deletedAt"] = datetime.now(GAME_TZ).isoformat()
+                session["deletePendingReason"] = None
+            else:
+                session["deletePendingReason"] = reason
+        _save_state_unlocked(state)
+
+
+def _try_delete_closed_session_user(team_key, session):
+    """Delete a closed temporary OTS user once no EUD is still connected."""
+    username = session.get("username")
+    if not username:
+        return {
+            "username": None,
+            "userDeleted": False,
+            "deletionPending": False,
+            "deleteReason": "missing_username",
+        }
+
+    if session.get("deletedAt"):
+        return {
+            "username": username,
+            "userDeleted": True,
+            "deletionPending": False,
+            "deleteReason": None,
+        }
+
+    # Defense in depth: configured permanent game accounts are never deleted.
+    if _is_permanent_game_user(username):
+        _mark_session_delete_state(
+            team_key,
+            username,
+            deleted=False,
+            reason="permanent_user_protected",
+        )
+        return {
+            "username": username,
+            "userDeleted": False,
+            "deletionPending": False,
+            "deleteReason": "permanent_user_protected",
+        }
+
+    euds = _get_user_euds(username)
+    connected = [
+        eud for eud in euds
+        if str(eud.get("last_status", "")).lower() == "connected"
+    ]
+    if connected:
+        _mark_session_delete_state(
+            team_key,
+            username,
+            deleted=False,
+            reason="connected_eud",
+        )
+        return {
+            "username": username,
+            "userDeleted": False,
+            "deletionPending": True,
+            "deleteReason": "connected_eud",
+            "connectedEuds": [eud.get("uid") for eud in connected if eud.get("uid")],
+        }
+
+    # Historical sessions may already have been removed manually.
+    if not _ots_user_exists(username):
+        _mark_session_delete_state(team_key, username, deleted=True)
+        return {
+            "username": username,
+            "userDeleted": True,
+            "deletionPending": False,
+            "deleteReason": "already_missing",
+        }
+
+    otsClient.delete_user(username)
+    _mark_session_delete_state(team_key, username, deleted=True)
+    return {
+        "username": username,
+        "userDeleted": True,
+        "deletionPending": False,
+        "deleteReason": None,
+    }
+
+
 def _current_session(team_key):
     return _read_state()["teams"][team_key].get("current")
 
@@ -390,12 +502,26 @@ def _revoke_session_credentials(team_key, session, reason):
         _safe_remove_membership(username, GAME_TEAMS[team_key]["group"], direction)
 
     _mark_session_closed(team_key, username, reason)
+
+    # OTS 1.7.13 has a supported administrator-only /api/user/delete endpoint.
+    # Do not delete while an EUD is still connected: an already-authenticated
+    # TLS socket can outlive the account record. Deletion is retried by the
+    # scheduled cleanup once every associated EUD is disconnected.
+    deletion = _try_delete_closed_session_user(
+        team_key,
+        {
+            "username": username,
+            "deletedAt": None,
+        },
+    )
+
     return {
         "username": username,
         "eudCount": len(euds),
         "euds": euds,
         "credentialsRevoked": True,
         "accountDeactivated": True,
+        **deletion,
     }
 
 
@@ -540,6 +666,8 @@ def generate_game_access(team_key):
             "expiresAt": cutoff.isoformat(),
             "closedAt": None,
             "closeReason": None,
+            "deletedAt": None,
+            "deletePendingReason": None,
         }
         _record_session(team_key, session)
 
@@ -617,7 +745,7 @@ def cleanup_game_team(team_key):
         "failures": failures,
         "hardEudDeleted": False,
         "note": (
-            "All tracked game session accounts were deactivated permanently. "
+            "Closed temporary OTS users are deleted once none of their EUDs is still connected. "
             "Historic OTS EUD rows remain because OTS exposes no supported EUD DELETE API."
         ),
     }), 207 if failures else 200
@@ -650,6 +778,36 @@ def cleanup_all_game_teams():
                 })
 
     return jsonify({"results": results, "failures": failures}), 207 if failures else 200
+
+
+@scheduler.task(
+    id="airsoft_game_user_delete_retry",
+    trigger="cron",
+    minute="*/5",
+    timezone="Europe/Amsterdam",
+    misfire_grace_time=300,
+    max_instances=1,
+)
+def airsoft_game_user_delete_retry():
+    """Delete closed temporary OTS users after their EUDs disconnect."""
+    with scheduler.app.app_context():
+        state = _read_state()
+        for team_key in GAME_TEAMS:
+            for session in state["teams"][team_key].get("sessions", []):
+                if not session.get("closedAt") or session.get("deletedAt"):
+                    continue
+                try:
+                    result = _try_delete_closed_session_user(team_key, session)
+                    if result.get("userDeleted"):
+                        current_app.logger.info(
+                            "Deleted closed airsoft game user %s",
+                            session.get("username"),
+                        )
+                except Exception:
+                    current_app.logger.exception(
+                        "Deferred deletion failed for airsoft game user %s",
+                        session.get("username"),
+                    )
 
 
 @scheduler.task(
