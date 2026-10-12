@@ -43,8 +43,19 @@ class OTSClient:
     def execute_request(self, method, endpoint, body=None, params=None, response_type="json"):
         try:
             url = self.base_url + endpoint
-            self.headers["Referer"] = self.base_url+self._data_packages
-            response = self.session.request(method, url, json=body, headers=self.headers, params=params, verify=OTS_VERIFY_SSL, timeout=30)
+            headers = dict(self.headers)
+            headers["Referer"] = self.base_url + self._data_packages
+            if self.auth_token:
+                headers["Authentication-Token"] = self.auth_token
+            response = self.session.request(
+                method,
+                url,
+                json=body,
+                headers=headers,
+                params=params,
+                verify=OTS_VERIFY_SSL,
+                timeout=30,
+            )
             if response_type == "json":
 
                 if not response.text.strip():
@@ -64,18 +75,22 @@ class OTSClient:
             print(f"Connection Error: {e}")
             raise ConnectionError(f"Could not connect to OTS server: {e}")
 
-    def request_handler(self, method, endpoint, body=None, params={}, response_type="json"):
+    def request_handler(self, method, endpoint, body=None, params=None, response_type="json"):
 
    #     if not self.csrf_token:
    #         self.get_csrf_token()
 
-        if not self.auth_token:    
+        if not self.auth_token:
             self.login()
 
-        if self.auth_token:
-            params['auth_token'] = self.auth_token
-              
-        response = self.execute_request(method, endpoint, body, params, response_type)
+        request_params = dict(params or {})
+        response = self.execute_request(
+            method,
+            endpoint,
+            body,
+            request_params,
+            response_type,
+        )
 
         if response.get('status_code') == 400: 
             raise BadRequestError(response)
@@ -417,7 +432,7 @@ class OTSClient:
         if not self.auth_token:
             self.login()
 
-        params = {"auth_token": self.auth_token}
+        params = {}
         data = {
             "preference_key": preference_key,
             "preference_value": preference_value,
@@ -434,7 +449,10 @@ class OTSClient:
             url,
             data=data,
             params=params,
-            headers={"Referer": self.base_url + self._profiles},
+            headers={
+                "Referer": self.base_url + self._profiles,
+                "Authentication-Token": self.auth_token,
+            },
             verify=OTS_VERIFY_SSL,
             timeout=30,
         )
