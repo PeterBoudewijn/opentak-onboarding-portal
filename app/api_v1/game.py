@@ -939,17 +939,13 @@ def _mission_creator_uid(team_key):
             if uid:
                 return uid
 
-    # Mission creation in OTS 1.7.13 requires a valid EUD UID. The mission is
-    # still isolated by its GroupMission association, so any existing EUD is a
-    # safe technical owner when no team-specific EUD is available.
-    response = otsClient.get_euds(page=1, page_size=500)
-    for eud in _response_results(response):
-        uid = eud.get("uid") if isinstance(eud, dict) else None
-        if uid:
-            return uid
-
+    # Do not fall back to an arbitrary EUD. OTS sends a direct mission-owner
+    # invitation to creator_uid when the mission is created; choosing an EUD
+    # from the other team would leak mission metadata even though later access
+    # checks deny the mission itself. Wait for a team/permanent observer/admin
+    # EUD instead.
     raise RuntimeError(
-        "Cannot create game mission because OpenTAKServer has no EUD records yet"
+        "Cannot create game mission because no safe team/observer/admin EUD is available"
     )
 
 
