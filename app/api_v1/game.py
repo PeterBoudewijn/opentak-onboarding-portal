@@ -1206,6 +1206,35 @@ def cleanup_all_game_teams():
 
 
 @scheduler.task(
+    id="airsoft_game_membership_guard",
+    trigger="cron",
+    minute="*/5",
+    timezone="Europe/Amsterdam",
+    misfire_grace_time=300,
+    max_instances=1,
+)
+def airsoft_game_membership_guard():
+    """Continuously enforce the reserved GameRed/GameBlue membership policy."""
+    with scheduler.app.app_context():
+        for team_key in GAME_TEAMS:
+            try:
+                current = _current_session(team_key)
+                current_username = current.get("username") if current else None
+                removed = _enforce_reserved_team_group(team_key, current_username)
+                if removed:
+                    current_app.logger.warning(
+                        "Airsoft membership guard removed unexpected users from %s: %s",
+                        GAME_TEAMS[team_key]["group"],
+                        ", ".join(removed),
+                    )
+            except Exception:
+                current_app.logger.exception(
+                    "Airsoft membership guard failed for %s",
+                    team_key,
+                )
+
+
+@scheduler.task(
     id="airsoft_game_user_delete_retry",
     trigger="cron",
     minute="*/5",
