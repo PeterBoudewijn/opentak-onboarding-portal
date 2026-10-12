@@ -303,9 +303,6 @@ function Game({ forcedTeam = null }) {
                     <div className="game-qr game-itak-qr">
                       <h3>iPhone / iTAK</h3>
                       {itakQr ? <QRCodeSVG value={itakQr} size={240} level="M" /> : <p>Geen iTAK QR ontvangen.</p>}
-                      <div className="game-itak-help">
-                        <p><strong>QR op een ander scherm?</strong><br />Scan deze QR met iTAK.</p>
-                      </div>
                     </div>
                   </div>
 
