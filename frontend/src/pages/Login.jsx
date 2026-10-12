@@ -8,6 +8,11 @@ import './Auth.css';
 
 const API_BASE_URL = window.location.origin;
 
+const safeInternalPath = (value) => {
+  if (!value || !value.startsWith('/') || value.startsWith('//')) return null;
+  return value;
+};
+
 function Login() {
   const { t } = useTranslation();
   const [username, setUsername] = useState('');
@@ -17,6 +22,23 @@ function Login() {
   const { login, oidcLogin } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+
+  const requestedNext = safeInternalPath(searchParams.get('next'));
+  const storedNext = safeInternalPath(sessionStorage.getItem('post_login_next'));
+  const postLoginPath = requestedNext || storedNext || '/dashboard';
+
+  const navigateAfterLogin = (needsPassword = false, needsProfile = false) => {
+    if (needsPassword) {
+      navigate('/set-password');
+      return;
+    }
+    if (needsProfile) {
+      navigate('/complete-profile');
+      return;
+    }
+    sessionStorage.removeItem('post_login_next');
+    navigate(postLoginPath);
+  };
 
   const { data: settings } = useQuery({
     queryKey: ['settings'],
@@ -76,12 +98,8 @@ function Login() {
           if (kioskSession) {
             localStorage.removeItem('kiosk_session_pending');
             navigate(`/kiosk-login/${kioskSession}`);
-          } else if (needsPassword) {
-            navigate('/set-password');
-          } else if (needsProfile) {
-            navigate('/complete-profile');
           } else {
-            navigate('/dashboard');
+            navigateAfterLogin(needsPassword, needsProfile);
           }
         } else {
           setError(result.error || t('auth.oidcLoginFailed'));
@@ -101,9 +119,7 @@ function Login() {
           const { access_token, refresh_token, needs_password, needs_profile } = response.data;
           const result = await oidcLogin(access_token, refresh_token);
           if (result.success) {
-            if (needs_password) navigate('/set-password');
-            else if (needs_profile) navigate('/complete-profile');
-            else navigate('/dashboard');
+            navigateAfterLogin(needs_password, needs_profile);
           } else {
             setError(result.error || t('auth.magicLinkFailed'));
           }
@@ -124,11 +140,7 @@ function Login() {
     const result = await login(username, password);
 
     if (result.success) {
-      if (result.needsProfileCompletion) {
-        navigate('/complete-profile');
-      } else {
-        navigate('/dashboard');
-      }
+      navigateAfterLogin(false, result.needsProfileCompletion);
     } else {
       setError(result.error);
     }
@@ -137,7 +149,8 @@ function Login() {
   };
 
   const handleOIDCLogin = (providerId) => {
-    // Full page navigation to the backend OIDC authorize endpoint
+    // Preserve the QR/deep-link destination across the external login roundtrip.
+    sessionStorage.setItem('post_login_next', postLoginPath);
     window.location.href = `${API_BASE_URL}/api/v1/auth/oidc/${providerId}/authorize`;
   };
 
@@ -257,6 +270,7 @@ function Login() {
                   setMagicLinkLoading(true);
                   setError('');
                   try {
+                    sessionStorage.setItem('post_login_next', postLoginPath);
                     await magicLinkAPI.requestLink(magicLinkEmail);
                     setMagicLinkSent(true);
                   } catch (err) {

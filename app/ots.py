@@ -25,6 +25,7 @@ class OTSClient:
     _groups = _apibase + "/groups"
     _groups_members = _groups + "/members"
     _meshtastic = _apibase + "/meshtastic"
+    _profiles = _apibase + "/profiles"
 
 
     def __init__(self, url, username, password):
@@ -53,6 +54,8 @@ class OTSClient:
                 except ValueError as e:
                     print(f"Error Parsing Response: {e}")
                     raise ConnectionError(f"Invalid response from OTS server: {e}")
+            elif response_type == "text":
+                return {"response": response.text, "status_code": response.status_code}
             else:
                 return response
             
@@ -188,12 +191,15 @@ class OTSClient:
             print(f"Error: {e}")
             return False
 
-    def get_euds(self, page=None, page_size=None):
+    def get_euds(self, page=None, page_size=None, username=None):
         params = {}
         if page is not None:
             params["page"] = page
         if page_size is not None:
-            params["page_size"] = page_size
+            # OTS paginate() uses the query parameter name "per_page".
+            params["per_page"] = page_size
+        if username is not None:
+            params["username"] = username
         return self.request_handler(method="GET", endpoint=self._eud, params=params)
         
     def get_jobs(self):
@@ -249,7 +255,7 @@ class OTSClient:
         if page is not None:
             params["page"] = page
         if page_size is not None:
-            params["page_size"] = page_size
+            params["per_page"] = page_size
         if name is not None:
             params["name"] = name
         if active is not None:
@@ -330,7 +336,13 @@ class OTSClient:
         params = {}
         if username is not None:
             params["username"] = username
-        return self.request_handler(method="GET", endpoint=self._itak_qr_string, params=params)
+        # OpenTAKServer 1.7.x returns this endpoint as plain text, not JSON.
+        return self.request_handler(
+            method="GET",
+            endpoint=self._itak_qr_string,
+            params=params,
+            response_type="text",
+        )
 
     def create_itak_qr_string(self, username=None, exp=None, nbf=None, max_uses=None):
         """
@@ -352,6 +364,47 @@ class OTSClient:
         if max_uses is not None:
             body["max"] = max_uses
         return self.request_handler(method="POST", endpoint=self._itak_qr_string, body=body)
+
+    def create_device_profile(self, preference_key, preference_value, value_class,
+                              enrollment=False, connection=True, active=True, eud_uid=None):
+        """Create or update an OTS device profile using its form-based API."""
+        if not self.auth_token:
+            self.login()
+
+        params = {"auth_token": self.auth_token}
+        data = {
+            "preference_key": preference_key,
+            "preference_value": preference_value,
+            "value_class": value_class,
+            "enrollment": "true" if enrollment else "false",
+            "connection": "true" if connection else "false",
+            "active": "true" if active else "false",
+        }
+        if eud_uid is not None:
+            data["eud_uid"] = eud_uid
+
+        url = self.base_url + self._profiles
+        response = self.session.post(
+            url,
+            data=data,
+            params=params,
+            headers={"Referer": self.base_url + self._profiles},
+            verify=OTS_VERIFY_SSL,
+            timeout=30,
+        )
+        try:
+            payload = response.json() if response.text.strip() else {}
+        except ValueError:
+            payload = {"raw": response.text}
+
+        if response.status_code == 400:
+            raise BadRequestError({"response": payload, "status_code": response.status_code})
+        if response.status_code == 401:
+            raise AuthorizationError({"response": payload, "status_code": response.status_code})
+        if response.status_code != 200:
+            raise Exception({"response": payload, "status_code": response.status_code})
+
+        return {"response": payload, "status_code": response.status_code}
 
     # Meshtastic endpoints - uses /api/meshtastic/channel
     _meshtastic_channel = _meshtastic + "/channel"

@@ -3,7 +3,7 @@ Werkzeug==2.2.2
 Flask-CORS==4.0.0
 flasgger==0.9.7.1
 flask-swagger-ui==5.21.0
-gunicorn==20.0.4
+gunicorn==26.2.0
 python-dotenv==0.19.1
 requests==2.32.3
 APScheduler==3.10.4

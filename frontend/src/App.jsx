@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { NotificationProvider } from './contexts/NotificationContext';
@@ -41,6 +41,8 @@ import Approvals from './pages/Approvals';
 import ClaimRadio from './pages/ClaimRadio';
 import Kiosk from './pages/Kiosk';
 import KioskLogin from './pages/KioskLogin';
+import Game from './pages/Game';
+import GameQrLogin from './pages/GameQrLogin';
 
 // Layout
 import Layout from './components/Layout';
@@ -118,16 +120,24 @@ const LoadingScreen = () => (
   </div>
 );
 
+const safeInternalPath = (value) => {
+  if (!value || !value.startsWith('/') || value.startsWith('//')) return null;
+  return value;
+};
+
 // Protected Route component
 const ProtectedRoute = ({ children, adminOnly = false, allowIncomplete = false }) => {
   const { user, loading, isAdmin, needsProfileCompletion, needsPasswordSet } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return <LoadingScreen />;
   }
 
   if (!user) {
-    return <Navigate to="/login" replace />;
+    const requestedPath = location.pathname + location.search;
+    const next = encodeURIComponent(requestedPath);
+    return <Navigate to={`/login?next=${next}`} replace />;
   }
 
   // Redirect to set password if needed (OIDC users without password)
@@ -150,13 +160,16 @@ const ProtectedRoute = ({ children, adminOnly = false, allowIncomplete = false }
 // Public Route component (redirects to dashboard if already logged in)
 const PublicRoute = ({ children }) => {
   const { user, loading } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return <LoadingScreen />;
   }
 
   if (user) {
-    return <Navigate to="/dashboard" replace />;
+    const params = new URLSearchParams(location.search);
+    const next = safeInternalPath(params.get('next'));
+    return <Navigate to={next || "/dashboard"} replace />;
   }
 
   return children;
@@ -171,7 +184,7 @@ function AppContent() {
         <DocumentTitle />
         <Notifications />
         <AuthProvider>
-          <Router>
+          <Router basename={import.meta.env.BASE_URL.replace(/\/$/, '') || '/'}>
           <Routes>
             {/* Public routes */}
             <Route
@@ -204,9 +217,10 @@ function AppContent() {
             />
             <Route path="/reset-password" element={<ResetPassword />} />
 
-            {/* Kiosk routes - standalone, no auth wrappers */}
+            {/* Standalone routes - no normal auth wrapper */}
             <Route path="/kiosk" element={<Kiosk />} />
             <Route path="/kiosk-login/:sessionId" element={<KioskLogin />} />
+            <Route path="/co/:team" element={<GameQrLogin />} />
 
             {/* Set password route - for OIDC users who need to set a password */}
             <Route
@@ -245,6 +259,10 @@ function AppContent() {
               <Route path="announcements" element={<AnnouncementHistory />} />
               <Route path="approvals" element={<Approvals />} />
               <Route path="claim-radio/:nodeId" element={<ClaimRadio />} />
+              <Route path="game" element={<Game />} />
+              <Route path="game/:team" element={<Game />} />
+              <Route path="red" element={<Game forcedTeam="red" />} />
+              <Route path="blue" element={<Game forcedTeam="blue" />} />
 
               {/* Admin routes */}
               <Route

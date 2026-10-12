@@ -274,11 +274,17 @@ def refresh():
         'roles': [role.name for role in user.roles]
     }
 
-    # Propagate impersonation claims through token refresh
+    # Propagate claims that must survive token refresh.
     jwt_data = get_jwt()
     if jwt_data.get('impersonated_by'):
         claims['impersonated_by'] = jwt_data['impersonated_by']
         claims['impersonated_by_username'] = jwt_data.get('impersonated_by_username', '')
+
+    # CO QR sessions are versioned. Keeping these claims ensures that rotating
+    # a physical QR also invalidates access tokens minted from an old refresh token.
+    if jwt_data.get('game_qr_team'):
+        claims['game_qr_team'] = jwt_data['game_qr_team']
+        claims['game_qr_version'] = jwt_data.get('game_qr_version', -1)
 
     access_token = create_access_token(
         identity=str(user.id),

@@ -14,11 +14,14 @@ const getApiBaseUrl = () => {
     return 'http://localhost:5000';
   }
 
-  // For production builds or any other case, use same origin (API served from same host)
-  return window.location.origin;
+  // Production is reverse-proxied under Vite's public base path (/game/).
+  // Keep portal API traffic away from OpenTAKServer's own /api routes.
+  const publicBasePath = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
+  return `${window.location.origin}${publicBasePath}`;
 };
 
 const API_BASE_URL = getApiBaseUrl();
+const PUBLIC_BASE_PATH = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
 
 // Log API URL in development for debugging
 if (import.meta.env.DEV) {
@@ -87,7 +90,7 @@ api.interceptors.response.use(
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
         localStorage.removeItem('user');
-        window.location.href = '/login';
+        window.location.href = `${PUBLIC_BASE_PATH}/login`;
         return Promise.reject(refreshError);
       }
     }
@@ -516,6 +519,25 @@ export const approvalsAPI = {
 export const qrAPI = {
   getAtakQRString: (refresh = false) => api.get('/qr/atak', { params: { refresh: refresh ? 'true' : undefined } }),
   getItakQRString: (refresh = false) => api.get('/qr/itak', { params: { refresh: refresh ? 'true' : undefined } }),
+};
+
+// Airsoft Game API
+export const gameAPI = {
+  getStatus: () => api.get('/game/status'),
+  generateAccess: (team, maxUses = 250) =>
+    api.post(`/game/${team}/access`, { maxUses }),
+  cleanupTeam: (team) =>
+    api.post(`/game/admin/cleanup/${team}`),
+  cleanupAll: () =>
+    api.post('/game/admin/cleanup'),
+  qrLogin: (team, token) =>
+    axios.post(`${API_BASE_URL}/api/v1/game/qr-login`, { team, token }),
+  getCoQr: () =>
+    api.get('/game/admin/co-qr'),
+  resetCoQr: (team) =>
+    api.post(`/game/admin/co-qr/${team}/reset`),
+  resetAllCoQr: () =>
+    api.post('/game/admin/co-qr/reset-all'),
 };
 
 // API Keys API
