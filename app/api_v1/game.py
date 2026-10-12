@@ -966,6 +966,7 @@ def _create_team_mission(team_key, creator_uid=None):
         group_ids=[int(group_id)],
         description=team["mission_description"],
         tool="public",
+        default_role="MISSION_SUBSCRIBER",
     )
 
     mission = _team_mission(team_key)
