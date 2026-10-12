@@ -255,7 +255,7 @@ def get_or_create_itak_token(username, force_refresh=False):
 
 
 @api_v1.route('/Marti/api/tls/config/qr', methods=['GET'])
-@jwt_required(optional=True)
+@jwt_required()
 def get_marti_qr():
     """
     Get QR code image for ATAK configuration
@@ -269,22 +269,29 @@ def get_marti_qr():
     - PNG image of QR code
     """
     try:
-        # Get username from query param or JWT token
-        client_uid = request.args.get('clientUid')
+        # This compatibility endpoint used to accept an arbitrary clientUid
+        # without authentication. Because the portal talks to OTS with an
+        # administrator service account, that allowed a public caller to mint
+        # enrollment credentials for an existing OTS user.
+        from app.models import UserModel
+        from app.rbac import get_user_roles
 
-        if not client_uid:
-            # Try to get from JWT if authenticated
-            try:
-                client_uid = get_jwt_identity()
-            except:
-                pass
+        current_user_id = get_jwt_identity()
+        user = UserModel.get_user_by_id(int(current_user_id))
+        if not user:
+            return Response('User not found', status=404, mimetype='text/plain')
 
-        if not client_uid:
+        requested_uid = str(request.args.get('clientUid') or '').strip()
+        is_admin = 'administrator' in set(get_user_roles())
+
+        if requested_uid and requested_uid != user.username and not is_admin:
             return Response(
-                'Missing clientUid parameter',
-                status=400,
+                'Cannot generate QR for another user',
+                status=403,
                 mimetype='text/plain'
             )
+
+        client_uid = requested_uid if (requested_uid and is_admin) else user.username
 
         # Get or create token (auto-regenerates if exhausted/expired)
         token_data = get_or_create_atak_token(client_uid)
