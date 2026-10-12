@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { NotificationProvider } from './contexts/NotificationContext';
@@ -119,16 +119,24 @@ const LoadingScreen = () => (
   </div>
 );
 
+const safeInternalPath = (value) => {
+  if (!value || !value.startsWith('/') || value.startsWith('//')) return null;
+  return value;
+};
+
 // Protected Route component
 const ProtectedRoute = ({ children, adminOnly = false, allowIncomplete = false }) => {
   const { user, loading, isAdmin, needsProfileCompletion, needsPasswordSet } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return <LoadingScreen />;
   }
 
   if (!user) {
-    return <Navigate to="/login" replace />;
+    const requestedPath = location.pathname + location.search;
+    const next = encodeURIComponent(requestedPath);
+    return <Navigate to={`/login?next=${next}`} replace />;
   }
 
   // Redirect to set password if needed (OIDC users without password)
@@ -151,13 +159,16 @@ const ProtectedRoute = ({ children, adminOnly = false, allowIncomplete = false }
 // Public Route component (redirects to dashboard if already logged in)
 const PublicRoute = ({ children }) => {
   const { user, loading } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return <LoadingScreen />;
   }
 
   if (user) {
-    return <Navigate to="/dashboard" replace />;
+    const params = new URLSearchParams(location.search);
+    const next = safeInternalPath(params.get('next'));
+    return <Navigate to={next || "/dashboard"} replace />;
   }
 
   return children;
@@ -247,6 +258,7 @@ function AppContent() {
               <Route path="approvals" element={<Approvals />} />
               <Route path="claim-radio/:nodeId" element={<ClaimRadio />} />
               <Route path="game" element={<Game />} />
+              <Route path="game/:team" element={<Game />} />
 
               {/* Admin routes */}
               <Route
