@@ -24,7 +24,7 @@ import string
 import threading
 
 from flask import current_app, jsonify, request
-from flask_jwt_extended import create_access_token, create_refresh_token, jwt_required
+from flask_jwt_extended import create_access_token, create_refresh_token, get_jwt, jwt_required
 
 from app.api_v1 import api_v1
 from app.extensions import scheduler
@@ -184,7 +184,9 @@ def _can_access_team(team_key):
     if "administrator" in roles:
         return True
     team = GAME_TEAMS.get(team_key)
-    return bool(team and team["leader_role"] in roles)
+    if not team or team["leader_role"] not in roles:
+        return False
+    return _qr_session_valid_for_team(team_key)
 
 
 def _require_team_access(team_key):
@@ -201,13 +203,85 @@ def _require_game_admin():
     return None
 
 
+def _co_qr_db_key(team_key, suffix):
+    return f"game_co_qr_{suffix}_{team_key}"
+
+
 def _co_qr_token(team_key):
+    from app.models import SystemSettingsModel
+
+    stored = SystemSettingsModel.get_setting(_co_qr_db_key(team_key, "token"), "")
+    if stored:
+        return str(stored).strip()
+
     config_key = (
         "GAME_CO_QR_TOKEN_RED"
         if team_key == "red"
         else "GAME_CO_QR_TOKEN_BLUE"
     )
     return str(current_app.config.get(config_key, "") or "").strip()
+
+
+def _co_qr_version(team_key):
+    from app.models import SystemSettingsModel
+
+    value = SystemSettingsModel.get_setting(_co_qr_db_key(team_key, "version"), "0")
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _rotate_co_qr_token(team_key):
+    from app.models import SystemSettingsModel
+
+    token = secrets.token_urlsafe(32)
+    version = _co_qr_version(team_key) + 1
+
+    token_setting = SystemSettingsModel.set_setting(
+        _co_qr_db_key(team_key, "token"),
+        token,
+        category="game",
+        description=f"Permanent CO QR bearer token for Team {team_key}",
+    )
+    version_setting = SystemSettingsModel.set_setting(
+        _co_qr_db_key(team_key, "version"),
+        str(version),
+        category="game",
+        description=f"CO QR session version for Team {team_key}",
+    )
+    if not token_setting or not version_setting:
+        raise RuntimeError("Could not save CO QR token")
+    return token, version
+
+
+def _qr_session_valid_for_team(team_key):
+    """Normal logins remain valid; QR logins must match the current QR version."""
+    try:
+        claims = get_jwt()
+    except Exception:
+        return True
+
+    qr_team = claims.get("game_qr_team")
+    if not qr_team:
+        return True
+
+    if qr_team != team_key:
+        return False
+
+    try:
+        token_version = int(claims.get("game_qr_version", -1))
+    except (TypeError, ValueError):
+        return False
+    return token_version == _co_qr_version(team_key)
+
+
+def _co_qr_public_url(team_key, token=None):
+    token = token if token is not None else _co_qr_token(team_key)
+    if not token:
+        return None
+    public_base = request.host_url.rstrip("/") + "/game"
+    return f"{public_base}/co/{team_key}#{token}"
 
 
 def _ensure_co_qr_user(team_key):
@@ -276,10 +350,12 @@ def game_qr_login():
             session_lifetime = timedelta(minutes=1)
 
         roles = [role.name for role in user.roles]
+        qr_version = _co_qr_version(team_key)
         claims = {
             "username": user.username,
             "roles": roles,
             "game_qr_team": team_key,
+            "game_qr_version": qr_version,
         }
         access_token = create_access_token(
             identity=str(user.id),
@@ -288,7 +364,10 @@ def game_qr_login():
         )
         refresh_token = create_refresh_token(
             identity=str(user.id),
-            additional_claims={"game_qr_team": team_key},
+            additional_claims={
+                "game_qr_team": team_key,
+                "game_qr_version": qr_version,
+            },
             expires_delta=session_lifetime,
         )
 
@@ -319,6 +398,18 @@ def game_qr_login():
         return jsonify({"error": f"CO QR login failed: {exc}"}), 500
 
 
+def _co_qr_admin_payload():
+    teams = {}
+    for team_key in GAME_TEAMS:
+        token = _co_qr_token(team_key)
+        teams[team_key] = {
+            "configured": bool(token),
+            "url": _co_qr_public_url(team_key, token),
+            "version": _co_qr_version(team_key),
+        }
+    return {"teams": teams}
+
+
 @api_v1.route("/game/admin/co-qr", methods=["GET"])
 @jwt_required()
 def game_admin_co_qr():
@@ -326,18 +417,44 @@ def game_admin_co_qr():
     error = _require_game_admin()
     if error:
         return error
+    return jsonify(_co_qr_admin_payload()), 200
 
-    # The production Vite app is intentionally published below /game/.
-    public_base = request.host_url.rstrip("/") + "/game"
-    teams = {}
-    for team_key in GAME_TEAMS:
-        token = _co_qr_token(team_key)
-        teams[team_key] = {
-            "configured": bool(token),
-            "url": f"{public_base}/co/{team_key}#{token}" if token else None,
-        }
 
-    return jsonify({"teams": teams}), 200
+@api_v1.route("/game/admin/co-qr/<team_key>/reset", methods=["POST"])
+@jwt_required()
+def game_admin_reset_co_qr(team_key):
+    """Rotate one CO QR immediately and invalidate older QR-derived sessions."""
+    error = _require_game_admin()
+    if error:
+        return error
+    if team_key not in GAME_TEAMS:
+        return jsonify({"error": "Unknown game team"}), 404
+
+    try:
+        _rotate_co_qr_token(team_key)
+        current_app.logger.warning("Administrator rotated CO QR for team %s", team_key)
+        return jsonify(_co_qr_admin_payload()), 200
+    except Exception as exc:
+        current_app.logger.exception("Failed to rotate CO QR for team %s", team_key)
+        return jsonify({"error": f"CO QR reset failed: {exc}"}), 500
+
+
+@api_v1.route("/game/admin/co-qr/reset-all", methods=["POST"])
+@jwt_required()
+def game_admin_reset_all_co_qr():
+    """Rotate both CO QR codes immediately."""
+    error = _require_game_admin()
+    if error:
+        return error
+
+    try:
+        for team_key in GAME_TEAMS:
+            _rotate_co_qr_token(team_key)
+        current_app.logger.warning("Administrator rotated all CO QR codes")
+        return jsonify(_co_qr_admin_payload()), 200
+    except Exception as exc:
+        current_app.logger.exception("Failed to rotate all CO QR codes")
+        return jsonify({"error": f"CO QR reset failed: {exc}"}), 500
 
 
 def _ensure_group_exists(group_name):
@@ -726,11 +843,10 @@ def _team_status(team_key):
 @api_v1.route("/game/status", methods=["GET"])
 @jwt_required()
 def game_status():
-    roles = set(get_user_roles())
     teams = []
 
     for team_key in GAME_TEAMS:
-        if "administrator" in roles or GAME_TEAMS[team_key]["leader_role"] in roles:
+        if _can_access_team(team_key):
             try:
                 teams.append(_team_status(team_key))
             except Exception as exc:
