@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PORTAL_ROOT="${PORTAL_ROOT:-/opt/opentak-onboarding-portal}"
+PORTAL_USER="${PORTAL_USER:-opentak-portal}"
+PORTAL_SERVICE="${PORTAL_SERVICE:-opentak-portal}"
+ENV_FILE="${PORTAL_ENV_FILE:-${PORTAL_ROOT}/.env}"
+
+if [[ "${EUID}" -ne 0 ]]; then
+  echo "Run this deployment script with sudo/root." >&2
+  exit 1
+fi
+
+for cmd in sudo systemctl python3 npm; do
+  command -v "${cmd}" >/dev/null 2>&1 || {
+    echo "Required command not found: ${cmd}" >&2
+    exit 1
+  }
+done
+
+[[ -d "${PORTAL_ROOT}" ]] || {
+  echo "Portal directory not found: ${PORTAL_ROOT}" >&2
+  exit 1
+}
+
+[[ -f "${ENV_FILE}" ]] || {
+  echo "Portal .env not found: ${ENV_FILE}" >&2
+  exit 1
+}
+
+set_env_value() {
+  local key="$1"
+  local value="$2"
+
+  if grep -qE "^[[:space:]]*${key}=" "${ENV_FILE}"; then
+    sed -i -E "s|^[[:space:]]*${key}=.*$|${key}=${value}|" "${ENV_FILE}"
+  else
+    printf '\n%s=%s\n' "${key}" "${value}" >> "${ENV_FILE}"
+  fi
+}
+
+timestamp="$(date +%Y%m%d%H%M%S)"
+cp -a "${ENV_FILE}" "${ENV_FILE}.bak.${timestamp}"
+
+# Permanent OTS users that must always remain in the reserved game groups.
+set_env_value "GAME_PERMANENT_USERS_RED" "CORood,3DAdmin,3DivisionGameMaster"
+set_env_value "GAME_PERMANENT_USERS_BLUE" "COBlauw,3DAdmin,3DivisionGameMaster"
+
+# Create missing CO QR bearer tokens while preserving any current printed QR codes.
+python3 "${PORTAL_ROOT}/scripts/installers/setup_game_co_qr_tokens.py" \
+  --env "${ENV_FILE}"
+
+echo "Building frontend..."
+cd "${PORTAL_ROOT}/frontend"
+sudo -u "${PORTAL_USER}" npm ci
+sudo -u "${PORTAL_USER}" npm run build
+
+echo "Restarting ${PORTAL_SERVICE}..."
+systemctl restart "${PORTAL_SERVICE}"
+systemctl is-active --quiet "${PORTAL_SERVICE}"
+
+echo
+echo "Airsoft game portal deployment completed."
+echo "Permanent GameRed users: CORood, 3DAdmin, 3DivisionGameMaster"
+echo "Permanent GameBlue users: COBLauw, 3DAdmin, 3DivisionGameMaster"
+echo "Configured permanent users are automatically ensured as IN+OUT members by the portal."
+echo "Existing CO QR codes were preserved unless they were not configured yet."
