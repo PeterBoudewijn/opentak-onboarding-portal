@@ -575,7 +575,9 @@ def _ensure_permanent_team_memberships(team_key):
 
             if present and not should_exist:
                 try:
-                    _safe_remove_membership(username, group_name, direction)
+                    # Observer IN membership is security-sensitive: do not use the
+                    # best-effort helper here because it intentionally hides errors.
+                    otsClient.remove_user_from_group(username, group_name, direction)
                     memberships.discard((username, direction))
                     removed.append({"username": username, "direction": direction})
                 except Exception as exc:
@@ -599,6 +601,26 @@ def _ensure_permanent_team_memberships(team_key):
                         "action": "add",
                         "error": str(exc),
                     })
+
+    # Re-read OTS so an observer can never silently remain IN after a failed
+    # removal. This is what keeps watch-only accounts invisible to the game teams.
+    final_memberships = set()
+    for member in _group_members(group_name):
+        if not isinstance(member, dict):
+            continue
+        username = member.get("username")
+        direction = member.get("direction")
+        if username and direction in ("IN", "OUT"):
+            final_memberships.add((username, direction))
+
+    for username in observers:
+        if (username, "IN") in final_memberships:
+            failures.append({
+                "username": username,
+                "direction": "IN",
+                "action": "verify_remove",
+                "error": "watch-only observer still has IN membership",
+            })
 
     if added or removed:
         current_app.logger.info(
