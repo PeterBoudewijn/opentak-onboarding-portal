@@ -33,6 +33,18 @@ def create_app():
         scheduler.init_app(app)
     jwt_manager.init_app(app)
 
+    @app.after_request
+    def add_security_headers(response):
+        """Baseline browser hardening for the public portal."""
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        response.headers.setdefault(
+            "Permissions-Policy",
+            "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+        )
+        return response
+
     # JWT error handlers
     @jwt_manager.invalid_token_loader
     def invalid_token_callback(error):
