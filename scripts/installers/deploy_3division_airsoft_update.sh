@@ -42,9 +42,14 @@ set_env_value() {
 timestamp="$(date +%Y%m%d%H%M%S)"
 cp -a "${ENV_FILE}" "${ENV_FILE}.bak.${timestamp}"
 
-# Permanent OTS users that must always remain in the reserved game groups.
-set_env_value "GAME_PERMANENT_USERS_RED" "CORood,3DAdmin,3DivisionGameMaster"
-set_env_value "GAME_PERMANENT_USERS_BLUE" "COBlauw,3DAdmin,3DivisionGameMaster"
+# Permanent CO users send + receive in their own team.
+set_env_value "GAME_PERMANENT_USERS_RED" "CORood"
+set_env_value "GAME_PERMANENT_USERS_BLUE" "COBlauw"
+
+# Watch-only users receive both teams but never get IN membership, so their own
+# PLI is not routed into GameRed/GameBlue.
+set_env_value "GAME_PERMANENT_OBSERVERS_RED" "3DAdmin,3DGameMaster"
+set_env_value "GAME_PERMANENT_OBSERVERS_BLUE" "3DAdmin,3DGameMaster"
 
 # Create missing CO QR bearer tokens while preserving any current printed QR codes.
 python3 "${PORTAL_ROOT}/scripts/installers/setup_game_co_qr_tokens.py" \
@@ -61,7 +66,8 @@ systemctl is-active --quiet "${PORTAL_SERVICE}"
 
 echo
 echo "Airsoft game portal deployment completed."
-echo "Permanent GameRed users: CORood, 3DAdmin, 3DivisionGameMaster"
-echo "Permanent GameBlue users: COBLauw, 3DAdmin, 3DivisionGameMaster"
-echo "Configured permanent users are automatically ensured as IN+OUT members by the portal."
+echo "GameRed send+receive: CORood"
+echo "GameBlue send+receive: COBlauw"
+echo "Watch-only on both teams (OUT only): 3DAdmin, 3DGameMaster"
+echo "The portal automatically removes IN membership from watch-only observers."
 echo "Existing CO QR codes were preserved unless they were not configured yet."
