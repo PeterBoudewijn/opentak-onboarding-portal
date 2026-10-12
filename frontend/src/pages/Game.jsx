@@ -118,9 +118,11 @@ function Game({ forcedTeam = null }) {
 
   const resetCoQr = async (team) => {
     const label = TEAM_LABELS[team] || team;
-    if (!window.confirm(
-      `CO ${label} QR-code resetten? De oude CO QR, bestaande CO-login en alle tijdelijke speleraccounts van Team ${label} worden direct ingetrokken.`
-    )) return;
+    const configured = Boolean(coQr?.[team]?.configured && coQr?.[team]?.url);
+    const message = configured
+      ? `CO ${label} QR-code resetten? De oude CO QR, bestaande CO-login en alle tijdelijke speleraccounts van Team ${label} worden direct ingetrokken.`
+      : `CO ${label} QR-code aanmaken? Alleen administrators kunnen deze permanente CO-login QR aanmaken of resetten.`;
+    if (!window.confirm(message)) return;
 
     setBusy(`co-qr-${team}`);
     setError('');
@@ -199,8 +201,9 @@ function Game({ forcedTeam = null }) {
             </div>
           </div>
           <p>
-            Deze QR-codes loggen de CO direct in met alleen toegang tot het eigen team.
-            Print ze alleen voor de betreffende CO.
+            Alleen een administrator kan deze permanente CO-login QR-codes aanmaken of
+            resetten. De QR logt de CO direct in met alleen toegang tot het eigen team.
+            Print hem alleen voor de betreffende CO.
           </p>
           <div className="game-qr-grid">
             {['red', 'blue'].map((teamKey) => (
@@ -217,8 +220,10 @@ function Game({ forcedTeam = null }) {
                   onClick={() => resetCoQr(teamKey)}
                 >
                   {busy === `co-qr-${teamKey}`
-                    ? 'Resetten...'
-                    : `Reset QR CO ${TEAM_LABELS[teamKey]}`}
+                    ? (coQr?.[teamKey]?.configured ? 'Resetten...' : 'Aanmaken...')
+                    : (coQr?.[teamKey]?.configured
+                      ? `Reset QR CO ${TEAM_LABELS[teamKey]}`
+                      : `Maak QR CO ${TEAM_LABELS[teamKey]} aan`)}
                 </button>
               </div>
             ))}
