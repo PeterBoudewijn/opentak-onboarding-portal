@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useParams } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import { useAuth } from '../contexts/AuthContext';
 import { gameAPI } from '../services/api';
@@ -18,6 +19,7 @@ function formatRemaining(iso) {
 
 function Game() {
   const { isAdmin } = useAuth();
+  const { team: requestedTeam } = useParams();
   const [status, setStatus] = useState(null);
   const [access, setAccess] = useState({});
   const [loading, setLoading] = useState(true);
@@ -49,6 +51,15 @@ function Game() {
   }, []);
 
   const teams = useMemo(() => status?.teams || [], [status]);
+  const visibleTeams = useMemo(() => {
+    if (!requestedTeam || !['red', 'blue'].includes(requestedTeam)) return teams;
+    return teams.filter((team) => team.team === requestedTeam);
+  }, [teams, requestedTeam]);
+  const requestedTeamDenied = (
+    requestedTeam &&
+    ['red', 'blue'].includes(requestedTeam) &&
+    !teams.some((team) => team.team === requestedTeam)
+  );
 
   const generateAccess = async (team) => {
     setBusy(`access-${team}`);
@@ -113,9 +124,14 @@ function Game() {
       </div>
 
       {error && <div className="game-error">{error}</div>}
+      {requestedTeamDenied && (
+        <div className="game-error">
+          Dit account heeft geen toegang tot Team {TEAM_LABELS[requestedTeam] || requestedTeam}.
+        </div>
+      )}
 
       <div className="game-grid">
-        {teams.map((team) => {
+        {visibleTeams.map((team) => {
           const generated = access[team.team];
           const atakQr = generated?.atak?.qrString;
           const itakQr = generated?.itak?.qrString;
