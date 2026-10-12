@@ -16,7 +16,7 @@ Admin roles (stored in local database, not OTS):
 
 from functools import wraps
 from flask import jsonify
-from flask_jwt_extended import get_jwt_identity
+from flask_jwt_extended import get_jwt, get_jwt_identity
 
 # Define admin roles with description and display name
 # Format: role_name: (description, display_name)
