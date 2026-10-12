@@ -51,9 +51,8 @@ set_env_value "GAME_PERMANENT_USERS_BLUE" "COBLauw"
 set_env_value "GAME_PERMANENT_OBSERVERS_RED" "3DAdmin,3DivisionGameMaster"
 set_env_value "GAME_PERMANENT_OBSERVERS_BLUE" "3DAdmin,3DivisionGameMaster"
 
-# Create missing CO QR bearer tokens while preserving any current printed QR codes.
-python3 "${PORTAL_ROOT}/scripts/installers/setup_game_co_qr_tokens.py" \
-  --env "${ENV_FILE}"
+# CO login QR codes are intentionally created/reset from the administrator portal.
+# Existing legacy .env tokens, if present, are left untouched for compatibility.
 
 echo "Building frontend..."
 cd "${PORTAL_ROOT}/frontend"
@@ -70,4 +69,4 @@ echo "GameRed send+receive: CORood"
 echo "GameBlue send+receive: COBLauw"
 echo "Watch-only on both teams (OUT only): 3DAdmin, 3DivisionGameMaster"
 echo "The portal automatically removes IN membership from watch-only observers."
-echo "Existing CO QR codes were preserved unless they were not configured yet."
+echo "CO login QR codes are created and reset by an administrator in the portal."
