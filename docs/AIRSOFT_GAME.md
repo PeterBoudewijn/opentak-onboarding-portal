@@ -79,6 +79,22 @@ A mission guard runs every five minutes (offset from the membership guard) and c
 
 At 23:00 `Europe/Amsterdam`, the old `GameRed` and `GameBlue` missions are deleted and immediately recreated. This gives each team a clean mission with a new mission GUID every day.
 
+### Strict mission isolation
+
+OpenTAKServer 1.7.13 has several Data Sync routes that do not consistently re-check mission group membership. Install `scripts/installers/patch_ots_1713_game_mission_isolation.py` with the OpenTAKServer 1.7.13 virtualenv to add a narrow server-side guard for the reserved game missions.
+
+After the patch:
+
+- `GameRed` requires an enabled `GameRed` OTS group membership.
+- `GameBlue` requires an enabled `GameBlue` OTS group membership.
+- Both IN and OUT memberships count for mission access. This lets the watch-only GameMaster see both missions without publishing PLI into either team.
+- OTS administrators retain access to both missions.
+- Direct mission GET/PUT/DELETE and mission subroutes are denied cross-team with HTTP 403.
+- Generic mission listings are restricted to the caller's enabled groups; users with no group membership only see `__ANON__` missions.
+- Generic invitation listings hide reserved game-mission invitations from users without the matching game group.
+
+The patch is idempotent, creates a timestamped backup of `mission_marti_api.py`, and byte-compiles the result before reporting success.
+
 ## 23:00 cutoff
 
 At 23:00 `Europe/Amsterdam`, the current session account for each team is:
