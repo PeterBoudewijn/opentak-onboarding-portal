@@ -60,6 +60,10 @@ GAME_PERMANENT_USERS_BLUE = _env_csv('GAME_PERMANENT_USERS_BLUE')
 GAME_PERMANENT_OBSERVERS_RED = _env_csv('GAME_PERMANENT_OBSERVERS_RED')
 GAME_PERMANENT_OBSERVERS_BLUE = _env_csv('GAME_PERMANENT_OBSERVERS_BLUE')
 
+# OTS identities represented by the administrator-managed CO portal QR codes.
+GAME_CO_PORTAL_USERNAME_RED = str(environ.get('GAME_CO_PORTAL_USERNAME_RED', 'CORood')).strip()
+GAME_CO_PORTAL_USERNAME_BLUE = str(environ.get('GAME_CO_PORTAL_USERNAME_BLUE', 'COBLauw')).strip()
+
 
 # Permanent bearer tokens used by the physical CO portal QR codes.
 # Generate these with scripts/installers/setup_game_co_qr_tokens.py.
