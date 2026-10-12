@@ -507,21 +507,40 @@ def _group_members(group_name):
     return members if isinstance(members, list) else []
 
 
-def _permanent_team_users(team_key):
-    """Return explicitly configured OTS users allowed to stay in a game group."""
-    config_key = (
-        "GAME_PERMANENT_USERS_RED"
-        if team_key == "red"
-        else "GAME_PERMANENT_USERS_BLUE"
-    )
+def _configured_game_users(config_key):
     configured = current_app.config.get(config_key, [])
     if isinstance(configured, str):
         configured = [value.strip() for value in configured.split(",") if value.strip()]
     return {str(username).strip() for username in configured if str(username).strip()}
 
 
+def _permanent_full_team_users(team_key):
+    """Permanent users that both send to and receive from the game team."""
+    config_key = (
+        "GAME_PERMANENT_USERS_RED"
+        if team_key == "red"
+        else "GAME_PERMANENT_USERS_BLUE"
+    )
+    return _configured_game_users(config_key)
+
+
+def _permanent_team_observers(team_key):
+    """Permanent watch-only users: OUT membership only, never IN."""
+    config_key = (
+        "GAME_PERMANENT_OBSERVERS_RED"
+        if team_key == "red"
+        else "GAME_PERMANENT_OBSERVERS_BLUE"
+    )
+    return _configured_game_users(config_key)
+
+
+def _permanent_team_users(team_key):
+    """All permanent protected users, regardless of membership direction."""
+    return _permanent_full_team_users(team_key) | _permanent_team_observers(team_key)
+
+
 def _ensure_permanent_team_memberships(team_key):
-    """Ensure every configured permanent OTS user has IN+OUT membership."""
+    """Enforce IN+OUT for CO users and OUT-only for watch-only observers."""
     group_name = GAME_TEAMS[team_key]["group"]
     _ensure_group_exists(group_name)
 
@@ -535,37 +554,67 @@ def _ensure_permanent_team_memberships(team_key):
         if username and direction in ("IN", "OUT"):
             memberships.add((username, direction))
 
-    added = []
-    failures = []
-    for username in sorted(_permanent_team_users(team_key)):
-        for direction in ("IN", "OUT"):
-            if (username, direction) in memberships:
-                continue
-            try:
-                otsClient.add_user_to_group(username, group_name, direction)
-                memberships.add((username, direction))
-                added.append({"username": username, "direction": direction})
-            except Exception as exc:
-                failures.append({
-                    "username": username,
-                    "direction": direction,
-                    "error": str(exc),
-                })
+    observers = _permanent_team_observers(team_key)
+    full_users = _permanent_full_team_users(team_key) - observers
 
-    if added:
+    desired = {}
+    for username in full_users:
+        desired[username] = {"IN", "OUT"}
+    for username in observers:
+        # Observer wins if a username is accidentally present in both lists.
+        desired[username] = {"OUT"}
+
+    added = []
+    removed = []
+    failures = []
+
+    for username, desired_directions in sorted(desired.items()):
+        for direction in ("IN", "OUT"):
+            present = (username, direction) in memberships
+            should_exist = direction in desired_directions
+
+            if present and not should_exist:
+                try:
+                    _safe_remove_membership(username, group_name, direction)
+                    memberships.discard((username, direction))
+                    removed.append({"username": username, "direction": direction})
+                except Exception as exc:
+                    failures.append({
+                        "username": username,
+                        "direction": direction,
+                        "action": "remove",
+                        "error": str(exc),
+                    })
+                continue
+
+            if should_exist and not present:
+                try:
+                    otsClient.add_user_to_group(username, group_name, direction)
+                    memberships.add((username, direction))
+                    added.append({"username": username, "direction": direction})
+                except Exception as exc:
+                    failures.append({
+                        "username": username,
+                        "direction": direction,
+                        "action": "add",
+                        "error": str(exc),
+                    })
+
+    if added or removed:
         current_app.logger.info(
-            "Ensured permanent game memberships for %s: %s",
+            "Enforced permanent game memberships for %s (added=%s removed=%s)",
             group_name,
-            ", ".join(f"{item['username']} {item['direction']}" for item in added),
+            added,
+            removed,
         )
     if failures:
         current_app.logger.warning(
-            "Could not ensure one or more permanent memberships for %s: %s",
+            "Could not fully enforce permanent memberships for %s: %s",
             group_name,
             failures,
         )
 
-    return {"added": added, "failures": failures}
+    return {"added": added, "removed": removed, "failures": failures}
 
 
 def _enforce_reserved_team_group(team_key, allowed_username=None):
