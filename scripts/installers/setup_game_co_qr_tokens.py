@@ -10,7 +10,6 @@ import argparse
 from pathlib import Path
 import secrets
 import shutil
-import stat
 from datetime import datetime
 
 
@@ -56,11 +55,6 @@ def update_env(path: Path, rotate: bool) -> tuple[list[str], list[str]]:
     shutil.copy2(path, backup)
 
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    try:
-        path.chmod(stat.S_IRUSR | stat.S_IWUSR)
-    except PermissionError:
-        pass
-
     return created, preserved
 
 
