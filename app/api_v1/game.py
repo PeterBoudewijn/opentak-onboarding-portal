@@ -163,6 +163,7 @@ def _save_state_unlocked(state):
     temp_path = path + ".tmp"
     with open(temp_path, "w", encoding="utf-8") as handle:
         json.dump(state, handle, indent=2, sort_keys=True)
+    os.chmod(temp_path, 0o600)
     os.replace(temp_path, path)
 
 
