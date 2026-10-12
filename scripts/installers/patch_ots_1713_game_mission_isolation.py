@@ -215,13 +215,33 @@ INVITATIONS_NEW = '''    invitations = db.session.execute(query).all()
 
 
 def locate_module(module_name: str) -> Path:
-    spec = importlib.util.find_spec(module_name)
-    if spec is None or not spec.origin:
+    """Locate the target source without importing mission_marti_api.
+
+    importlib.find_spec() on the full nested module imports parent packages.
+    In OTS 1.7.13 that can initialize SQLAlchemy models before the Flask app
+    has configured the db extension, which raises errors such as
+    "'NoneType' object has no attribute 'relationship'".
+    """
+    package_spec = importlib.util.find_spec("opentakserver")
+    if (
+        package_spec is None
+        or not package_spec.submodule_search_locations
+    ):
         raise RuntimeError(
-            f"Could not locate {module_name}. "
+            "Could not locate the opentakserver package. "
             "Run this script with the OpenTAKServer 1.7.13 virtualenv Python."
         )
-    return Path(spec.origin).resolve()
+
+    package_root = Path(next(iter(package_spec.submodule_search_locations))).resolve()
+
+    if module_name != "opentakserver.blueprints.marti_api.mission_marti_api":
+        raise RuntimeError(f"Unsupported module: {module_name}")
+
+    target = package_root / "blueprints" / "marti_api" / "mission_marti_api.py"
+    if not target.is_file():
+        raise RuntimeError(f"Could not locate {module_name}: {target}")
+
+    return target
 
 
 def patch_source(source: str) -> str:
