@@ -520,12 +520,64 @@ def _permanent_team_users(team_key):
     return {str(username).strip() for username in configured if str(username).strip()}
 
 
+def _ensure_permanent_team_memberships(team_key):
+    """Ensure every configured permanent OTS user has IN+OUT membership."""
+    group_name = GAME_TEAMS[team_key]["group"]
+    _ensure_group_exists(group_name)
+
+    members = _group_members(group_name)
+    memberships = set()
+    for member in members:
+        if not isinstance(member, dict):
+            continue
+        username = member.get("username")
+        direction = member.get("direction")
+        if username and direction in ("IN", "OUT"):
+            memberships.add((username, direction))
+
+    added = []
+    failures = []
+    for username in sorted(_permanent_team_users(team_key)):
+        for direction in ("IN", "OUT"):
+            if (username, direction) in memberships:
+                continue
+            try:
+                otsClient.add_user_to_group(username, group_name, direction)
+                memberships.add((username, direction))
+                added.append({"username": username, "direction": direction})
+            except Exception as exc:
+                failures.append({
+                    "username": username,
+                    "direction": direction,
+                    "error": str(exc),
+                })
+
+    if added:
+        current_app.logger.info(
+            "Ensured permanent game memberships for %s: %s",
+            group_name,
+            ", ".join(f"{item['username']} {item['direction']}" for item in added),
+        )
+    if failures:
+        current_app.logger.warning(
+            "Could not ensure one or more permanent memberships for %s: %s",
+            group_name,
+            failures,
+        )
+
+    return {"added": added, "failures": failures}
+
+
 def _enforce_reserved_team_group(team_key, allowed_username=None):
     """Keep reserved groups limited to the current session and permanent allowlist."""
     group_name = GAME_TEAMS[team_key]["group"]
     allowed_usernames = _permanent_team_users(team_key)
     if allowed_username:
         allowed_usernames.add(allowed_username)
+
+    # Configured permanent users are authoritative: make sure they are present
+    # before removing any non-allowlisted members.
+    _ensure_permanent_team_memberships(team_key)
 
     removed = []
 
