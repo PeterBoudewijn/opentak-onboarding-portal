@@ -352,6 +352,7 @@ def game_qr_login():
     if team_key not in GAME_TEAMS:
         return jsonify({"error": "Unknown game team"}), 404
 
+    team = GAME_TEAMS[team_key]
     expected_token = _co_qr_token(team_key)
     if not expected_token:
         return jsonify({"error": "CO QR login is not configured for this team"}), 503
