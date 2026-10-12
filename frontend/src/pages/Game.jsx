@@ -119,7 +119,7 @@ function Game({ forcedTeam = null }) {
   const resetCoQr = async (team) => {
     const label = TEAM_LABELS[team] || team;
     if (!window.confirm(
-      `CO ${label} QR-code resetten? De oude QR en bestaande login via die QR worden direct ongeldig.`
+      `CO ${label} QR-code resetten? De oude CO QR, bestaande CO-login en alle tijdelijke speleraccounts van Team ${label} worden direct ingetrokken.`
     )) return;
 
     setBusy(`co-qr-${team}`);
@@ -127,6 +127,15 @@ function Game({ forcedTeam = null }) {
     try {
       const response = await gameAPI.resetCoQr(team);
       setCoQr(response.data?.teams || null);
+      setAccess((current) => ({ ...current, [team]: undefined }));
+      await loadStatus();
+
+      const failures = response.data?.playerCleanup?.failures || [];
+      if (failures.length) {
+        setError(
+          `CO QR is vernieuwd, maar ${failures.length} tijdelijk speleraccount kon niet volledig worden ingetrokken. Controleer de serverlog.`
+        );
+      }
     } catch (err) {
       setError(err.response?.data?.error || `CO ${label} QR resetten is mislukt.`);
     } finally {
@@ -135,7 +144,9 @@ function Game({ forcedTeam = null }) {
   };
 
   const resetAllCoQr = async () => {
-    const confirmation = window.prompt('Typ QR RESET om beide CO QR-codes te resetten.');
+    const confirmation = window.prompt(
+      'Dit reset beide CO QR-codes en trekt alle tijdelijke speleraccounts van Rood en Blauw in. Typ QR RESET om door te gaan.'
+    );
     if (confirmation !== 'QR RESET') return;
 
     setBusy('co-qr-all');
@@ -143,6 +154,17 @@ function Game({ forcedTeam = null }) {
     try {
       const response = await gameAPI.resetAllCoQr();
       setCoQr(response.data?.teams || null);
+      setAccess({});
+      await loadStatus();
+
+      const cleanup = response.data?.playerCleanup || {};
+      const failures = Object.values(cleanup)
+        .flatMap((item) => item?.failures || []);
+      if (failures.length) {
+        setError(
+          `CO QR-codes zijn vernieuwd, maar ${failures.length} tijdelijk speleraccount kon niet volledig worden ingetrokken. Controleer de serverlog.`
+        );
+      }
     } catch (err) {
       setError(err.response?.data?.error || 'CO QR-codes resetten is mislukt.');
     } finally {
@@ -211,9 +233,10 @@ function Game({ forcedTeam = null }) {
             </button>
           </div>
           <p className="game-warning">
-            Reset maakt de oude QR-code direct ongeldig. Ook een bestaande portalsessie
-            die via die oude QR is geopend, verliest toegang tot het gameteam. Print daarna
-            de nieuwe QR voor de betreffende CO.
+            Reset maakt de oude CO QR direct ongeldig, blokkeert bestaande CO-toegang via
+            die QR en trekt ook alle tijdelijke speleraccounts van het betreffende team in.
+            Tijdelijke OTS-users worden verwijderd zodra hun EUD is disconnected. CORood en
+            COBLauw blijven onaangetast. Print daarna de nieuwe QR voor de betreffende CO.
           </p>
         </section>
       )}
