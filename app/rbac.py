@@ -69,10 +69,18 @@ MODULE_ROLES = {
 
 
 def get_user_roles():
-    """Get the roles from the database for the current user (not from JWT)"""
+    """Get effective roles for the current session."""
     from app.models import UserModel
 
     try:
+        # A CO QR is a bearer credential for one game-leader role only.
+        # Even when it represents an existing portal/OTS user with broader DB
+        # roles, the QR-derived session must remain least-privilege.
+        jwt_data = get_jwt()
+        qr_team = jwt_data.get("game_qr_team")
+        if qr_team in ("red", "blue"):
+            return [f"game_{qr_team}_leader"]
+
         current_user_id = get_jwt_identity()
         if not current_user_id:
             return []
