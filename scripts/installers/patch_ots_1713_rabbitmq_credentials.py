@@ -67,15 +67,12 @@ def patch_app(path: Path) -> bool:
     source = ensure_quote_import(source)
     replacement = (
         f"        {MARKER}\n"
-        "        message_queue="
-        + rabbit_url_expr("")[0:]
-        + ","
+        '        message_queue="amqp://{}:{}@{}//".format(\n'
+        '            quote(str(app.config.get("OTS_RABBITMQ_USERNAME") or ""), safe=""),\n'
+        '            quote(str(app.config.get("OTS_RABBITMQ_PASSWORD") or ""), safe=""),\n'
+        '            app.config.get("OTS_RABBITMQ_SERVER_ADDRESS"),\n'
+        '        ),'
     )
-
-    # rabbit_url_expr starts directly with a quoted expression; indent continuation
-    # lines to match the function call.
-    replacement = replacement.replace("\n", "\n        ")
-    replacement = replacement.replace(f"        {MARKER}\n        ", f"        {MARKER}\n        ", 1)
     source = source.replace(old, replacement, 1)
     path.write_text(source, encoding="utf-8")
     return True
@@ -94,9 +91,11 @@ def patch_cot_parser(path: Path) -> bool:
     replacement = (
         f"    {MARKER}\n"
         "    sio = SocketIO(\n"
-        "        message_queue=\n"
-        + rabbit_url_expr("            ")
-        + "\n"
+        '        message_queue="amqp://{}:{}@{}//".format(\n'
+        '            quote(str(app.config.get("OTS_RABBITMQ_USERNAME") or ""), safe=""),\n'
+        '            quote(str(app.config.get("OTS_RABBITMQ_PASSWORD") or ""), safe=""),\n'
+        '            app.config.get("OTS_RABBITMQ_SERVER_ADDRESS"),\n'
+        "        )\n"
         "    )"
     )
     source = source.replace(old, replacement, 1)
