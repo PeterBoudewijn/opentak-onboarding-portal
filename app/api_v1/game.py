@@ -12,6 +12,7 @@ Security model:
 - ATAK enrollment tokens expire at the next 23:00 Europe/Amsterdam,
   capped at 24 real hours.
 - Closed temporary OTS users are deleted after their EUDs have disconnected.
+- GameRed and GameBlue each have a group-isolated mission that is replaced daily at 23:00.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -39,12 +40,16 @@ GAME_TEAMS = {
         "group": "GameRed",
         "team_color": "Red",
         "leader_role": "game_red_leader",
+        "mission": "GameRed",
+        "mission_description": "Dagelijkse airsoftmissie voor Team Rood",
     },
     "blue": {
         "label": "GameBlue",
         "group": "GameBlue",
         "team_color": "Blue",
         "leader_role": "game_blue_leader",
+        "mission": "GameBlue",
+        "mission_description": "Dagelijkse airsoftmissie voor Team Blauw",
     },
 }
 _STATE_LOCK = threading.Lock()
@@ -505,11 +510,22 @@ def _ensure_group_exists(group_name):
         item for item in _response_results(response)
         if item.get("name") == group_name
     ]
+    if matches:
+        return matches[0]
+
+    otsClient.create_group(
+        group_name,
+        description=f"Airsoft game isolation group for {group_name}",
+    )
+
+    response = otsClient.get_groups(name=group_name, page_size=100)
+    matches = [
+        item for item in _response_results(response)
+        if item.get("name") == group_name
+    ]
     if not matches:
-        otsClient.create_group(
-            group_name,
-            description=f"Airsoft game isolation group for {group_name}",
-        )
+        raise RuntimeError(f"Could not create or find OTS group {group_name}")
+    return matches[0]
 
 
 def _safe_remove_membership(username, group_name, direction):
@@ -884,6 +900,113 @@ def _current_session(team_key):
     return _read_state()["teams"][team_key].get("current")
 
 
+def _team_mission(team_key):
+    """Return the current OTS mission record for a game team, if it exists."""
+    mission_name = GAME_TEAMS[team_key]["mission"]
+    response = otsClient.get_missions(name=mission_name, page_size=100)
+    for mission in _response_results(response):
+        if isinstance(mission, dict) and mission.get("name") == mission_name:
+            return mission
+    return None
+
+
+def _mission_creator_uid(team_key):
+    """Pick a stable existing EUD UID to own the server-created team mission."""
+    candidates = []
+    current = _current_session(team_key)
+    if current and current.get("username"):
+        candidates.append(current["username"])
+
+    candidates.extend(sorted(_permanent_full_team_users(team_key)))
+    candidates.extend(sorted(_permanent_team_observers(team_key)))
+
+    # The OTS service account is a useful fallback if it also owns an EUD.
+    if getattr(otsClient, "username", None):
+        candidates.append(otsClient.username)
+
+    seen = set()
+    for username in candidates:
+        if not username or username in seen:
+            continue
+        seen.add(username)
+        try:
+            euds = _get_user_euds(username)
+        except Exception:
+            continue
+        for eud in euds:
+            uid = eud.get("uid") if isinstance(eud, dict) else None
+            if uid:
+                return uid
+
+    # Mission creation in OTS 1.7.13 requires a valid EUD UID. The mission is
+    # still isolated by its GroupMission association, so any existing EUD is a
+    # safe technical owner when no team-specific EUD is available.
+    response = otsClient.get_euds(page=1, page_size=500)
+    for eud in _response_results(response):
+        uid = eud.get("uid") if isinstance(eud, dict) else None
+        if uid:
+            return uid
+
+    raise RuntimeError(
+        "Cannot create game mission because OpenTAKServer has no EUD records yet"
+    )
+
+
+def _create_team_mission(team_key, creator_uid=None):
+    team = GAME_TEAMS[team_key]
+    group = _ensure_group_exists(team["group"])
+    group_id = group.get("id") if isinstance(group, dict) else None
+    if group_id is None:
+        raise RuntimeError(f"OTS group {team['group']} has no group ID")
+
+    creator_uid = creator_uid or _mission_creator_uid(team_key)
+    otsClient.create_mission(
+        name=team["mission"],
+        creator_uid=creator_uid,
+        group_ids=[int(group_id)],
+        description=team["mission_description"],
+        tool="public",
+    )
+
+    mission = _team_mission(team_key)
+    if not mission:
+        raise RuntimeError(f"OTS mission {team['mission']} was not created")
+
+    current_app.logger.info(
+        "Created airsoft mission %s for group %s using creator UID %s",
+        team["mission"],
+        team["group"],
+        creator_uid,
+    )
+    return mission
+
+
+def _ensure_team_mission(team_key):
+    mission = _team_mission(team_key)
+    if mission:
+        return {"created": False, "mission": mission}
+    return {"created": True, "mission": _create_team_mission(team_key)}
+
+
+def _reset_team_mission(team_key):
+    """Delete the old team mission and create a fresh mission with a new GUID."""
+    team = GAME_TEAMS[team_key]
+    old_mission = _team_mission(team_key)
+    old_guid = old_mission.get("guid") if old_mission else None
+
+    if old_mission:
+        otsClient.delete_mission(team["mission"])
+
+    new_mission = _create_team_mission(team_key)
+    return {
+        "name": team["mission"],
+        "oldGuid": old_guid,
+        "newGuid": new_mission.get("guid"),
+        "deleted": bool(old_mission),
+        "created": True,
+    }
+
+
 def _mark_session_closed(team_key, username, reason):
     with _STATE_LOCK:
         state = _load_state_unlocked()
@@ -994,6 +1117,7 @@ def _team_status(team_key):
         "username": username,
         "group": team["group"],
         "teamColor": team["team_color"],
+        "missionName": team["mission"],
         "eudCount": len(euds),
         "euds": euds,
         "profileSync": profile_sync,
@@ -1260,6 +1384,32 @@ def airsoft_game_membership_guard():
 
 
 @scheduler.task(
+    id="airsoft_game_mission_guard",
+    trigger="cron",
+    minute="2-59/5",
+    timezone="Europe/Amsterdam",
+    misfire_grace_time=300,
+    max_instances=1,
+)
+def airsoft_game_mission_guard():
+    """Create a missing GameRed/GameBlue mission without waiting for 23:00."""
+    with scheduler.app.app_context():
+        for team_key in GAME_TEAMS:
+            try:
+                result = _ensure_team_mission(team_key)
+                if result["created"]:
+                    current_app.logger.info(
+                        "Airsoft mission guard created missing mission %s",
+                        GAME_TEAMS[team_key]["mission"],
+                    )
+            except Exception:
+                current_app.logger.exception(
+                    "Airsoft mission guard failed for %s",
+                    team_key,
+                )
+
+
+@scheduler.task(
     id="airsoft_game_user_delete_retry",
     trigger="cron",
     minute="*/5",
@@ -1299,7 +1449,7 @@ def airsoft_game_user_delete_retry():
     max_instances=1,
 )
 def airsoft_game_credential_cutoff():
-    """Permanently deactivate the current team session accounts at 23:00."""
+    """Deactivate team sessions and replace both team missions at 23:00."""
     with scheduler.app.app_context():
         for team_key in GAME_TEAMS:
             try:
@@ -1314,4 +1464,18 @@ def airsoft_game_credential_cutoff():
             except Exception:
                 current_app.logger.exception(
                     "23:00 airsoft cutoff failed for %s", team_key
+                )
+
+        for team_key in GAME_TEAMS:
+            try:
+                mission_result = _reset_team_mission(team_key)
+                current_app.logger.info(
+                    "23:00 mission reset completed for %s (%s -> %s)",
+                    team_key,
+                    mission_result["oldGuid"],
+                    mission_result["newGuid"],
+                )
+            except Exception:
+                current_app.logger.exception(
+                    "23:00 mission reset failed for %s", team_key
                 )
