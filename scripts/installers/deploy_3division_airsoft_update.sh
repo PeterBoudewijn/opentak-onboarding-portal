@@ -45,6 +45,8 @@ cp -a "${ENV_FILE}" "${ENV_FILE}.bak.${timestamp}"
 # Permanent CO users send + receive in their own team.
 set_env_value "GAME_PERMANENT_USERS_RED" "CORood"
 set_env_value "GAME_PERMANENT_USERS_BLUE" "COBLauw"
+set_env_value "GAME_CO_PORTAL_USERNAME_RED" "CORood"
+set_env_value "GAME_CO_PORTAL_USERNAME_BLUE" "COBLauw"
 
 # Watch-only users receive both teams but never get IN membership, so their own
 # PLI is not routed into GameRed/GameBlue.
