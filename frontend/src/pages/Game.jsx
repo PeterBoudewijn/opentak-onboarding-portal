@@ -17,14 +17,16 @@ function formatRemaining(iso) {
   return `${hours}u ${minutes}m`;
 }
 
-function Game() {
+function Game({ forcedTeam = null }) {
   const { isAdmin } = useAuth();
-  const { team: requestedTeam } = useParams();
+  const { team: routeTeam } = useParams();
+  const requestedTeam = forcedTeam || routeTeam;
   const [status, setStatus] = useState(null);
   const [access, setAccess] = useState({});
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState('');
+  const [coQr, setCoQr] = useState(null);
   const [, setTick] = useState(0);
 
   const admin = isAdmin();
@@ -49,6 +51,13 @@ function Game() {
     }, 30000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (!admin) return;
+    gameAPI.getCoQr()
+      .then((response) => setCoQr(response.data?.teams || null))
+      .catch(() => setCoQr(null));
+  }, [admin]);
 
   const teams = useMemo(() => status?.teams || [], [status]);
   const visibleTeams = useMemo(() => {
@@ -124,6 +133,38 @@ function Game() {
       </div>
 
       {error && <div className="game-error">{error}</div>}
+
+      {admin && coQr && (
+        <section className="game-card">
+          <div className="game-card-title">
+            <div>
+              <span className="game-team-badge">BEHEER</span>
+              <h2>Permanente CO-login QR-codes</h2>
+            </div>
+          </div>
+          <p>
+            Deze QR-codes loggen de CO direct in met alleen toegang tot het eigen team.
+            Print ze alleen voor de betreffende CO.
+          </p>
+          <div className="game-qr-grid">
+            {['red', 'blue'].map((teamKey) => (
+              <div className="game-qr" key={teamKey}>
+                <h3>CO {TEAM_LABELS[teamKey]}</h3>
+                {coQr?.[teamKey]?.configured && coQr?.[teamKey]?.url ? (
+                  <QRCodeSVG value={coQr[teamKey].url} size={240} level="H" />
+                ) : (
+                  <p>QR-login is nog niet geconfigureerd.</p>
+                )}
+              </div>
+            ))}
+          </div>
+          <p className="game-warning">
+            Wie een foto of kopie van deze QR heeft, kan als die CO inloggen. Bij verlies of
+            uitlekken moeten de CO QR-tokens worden geroteerd.
+          </p>
+        </section>
+      )}
+
       {requestedTeamDenied && (
         <div className="game-error">
           Dit account heeft geen toegang tot Team {TEAM_LABELS[requestedTeam] || requestedTeam}.
