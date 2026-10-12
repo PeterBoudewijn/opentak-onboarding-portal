@@ -1139,10 +1139,15 @@ def change_password():
         if not data:
             return jsonify({'error': 'Request body is required'}), 400
 
+        current_password = data.get('currentPassword')
         new_password = data.get('newPassword')
 
+        if not current_password:
+            return jsonify({'error': 'Current password is required'}), 400
         if not new_password:
             return jsonify({'error': 'New password is required'}), 400
+        if len(new_password) < 8:
+            return jsonify({'error': 'New password must be at least 8 characters'}), 400
 
         current_user_id = get_jwt_identity()
         # Convert to int since JWT identity is stored as string
@@ -1151,14 +1156,32 @@ def change_password():
         if not user:
             return jsonify({'error': 'User not found'}), 404
 
-        # Change password in OTS (no current password verification required)
+        # Re-authenticate as the user before allowing a password change.
+        # A stolen portal JWT alone must not be enough to take over the OTS account.
         try:
-            ots = OTSClient(current_app.config['OTS_URL'], current_app.config['OTS_USERNAME'], current_app.config['OTS_PASSWORD'])
-            result = ots.reset_user_password(user.username, new_password)
-            current_app.logger.info(f"Password reset result: {result}")
+            user_ots = OTSClient(
+                current_app.config['OTS_URL'],
+                user.username,
+                current_password,
+            )
+            user_ots.get_me()
+        except Exception:
+            return jsonify({'error': 'Current password is incorrect'}), 401
+
+        try:
+            ots = OTSClient(
+                current_app.config['OTS_URL'],
+                current_app.config['OTS_USERNAME'],
+                current_app.config['OTS_PASSWORD'],
+            )
+            ots.reset_user_password(user.username, new_password)
+            current_app.logger.info(
+                "Password changed for user '%s' after current-password verification",
+                user.username,
+            )
         except Exception as e:
             current_app.logger.error(f"Password reset failed: {str(e)}")
-            return jsonify({'error': f'Failed to reset password: {str(e)}'}), 400
+            return jsonify({'error': 'Failed to reset password'}), 400
 
         return jsonify({'message': 'Password changed successfully'}), 200
 
