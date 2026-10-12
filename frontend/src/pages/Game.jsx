@@ -116,6 +116,40 @@ function Game({ forcedTeam = null }) {
     }
   };
 
+  const resetCoQr = async (team) => {
+    const label = TEAM_LABELS[team] || team;
+    if (!window.confirm(
+      `CO ${label} QR-code resetten? De oude QR en bestaande login via die QR worden direct ongeldig.`
+    )) return;
+
+    setBusy(`co-qr-${team}`);
+    setError('');
+    try {
+      const response = await gameAPI.resetCoQr(team);
+      setCoQr(response.data?.teams || null);
+    } catch (err) {
+      setError(err.response?.data?.error || `CO ${label} QR resetten is mislukt.`);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const resetAllCoQr = async () => {
+    const confirmation = window.prompt('Typ QR RESET om beide CO QR-codes te resetten.');
+    if (confirmation !== 'QR RESET') return;
+
+    setBusy('co-qr-all');
+    setError('');
+    try {
+      const response = await gameAPI.resetAllCoQr();
+      setCoQr(response.data?.teams || null);
+    } catch (err) {
+      setError(err.response?.data?.error || 'CO QR-codes resetten is mislukt.');
+    } finally {
+      setBusy(null);
+    }
+  };
+
   if (loading) return <div className="game-page"><p>Gameportal laden...</p></div>;
 
   return (
@@ -155,12 +189,31 @@ function Game({ forcedTeam = null }) {
                 ) : (
                   <p>QR-login is nog niet geconfigureerd.</p>
                 )}
+                <button
+                  className="game-danger"
+                  disabled={busy !== null}
+                  onClick={() => resetCoQr(teamKey)}
+                >
+                  {busy === `co-qr-${teamKey}`
+                    ? 'Resetten...'
+                    : `Reset QR CO ${TEAM_LABELS[teamKey]}`}
+                </button>
               </div>
             ))}
           </div>
+          <div className="game-admin-actions">
+            <button
+              className="game-danger"
+              disabled={busy !== null}
+              onClick={resetAllCoQr}
+            >
+              {busy === 'co-qr-all' ? 'Resetten...' : 'Reset beide CO QR-codes'}
+            </button>
+          </div>
           <p className="game-warning">
-            Wie een foto of kopie van deze QR heeft, kan als die CO inloggen. Bij verlies of
-            uitlekken moeten de CO QR-tokens worden geroteerd.
+            Reset maakt de oude QR-code direct ongeldig. Ook een bestaande portalsessie
+            die via die oude QR is geopend, verliest toegang tot het gameteam. Print daarna
+            de nieuwe QR voor de betreffende CO.
           </p>
         </section>
       )}
