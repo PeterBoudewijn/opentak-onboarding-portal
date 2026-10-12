@@ -284,14 +284,26 @@ def _co_qr_public_url(team_key, token=None):
     return f"{public_base}/co/{team_key}#{token}"
 
 
+def _co_portal_username(team_key):
+    config_key = (
+        "GAME_CO_PORTAL_USERNAME_RED"
+        if team_key == "red"
+        else "GAME_CO_PORTAL_USERNAME_BLUE"
+    )
+    return str(current_app.config.get(config_key, "") or "").strip()
+
+
 def _ensure_co_qr_user(team_key):
-    """Create a least-privilege local identity used only by the physical CO QR."""
+    """Use the permanent CO identity for an admin-managed QR login."""
     from app.models import db, UserModel, UserRoleModel
 
     team = GAME_TEAMS[team_key]
-    username = "gameqrred" if team_key == "red" else "gameqrblue"
+    username = _co_portal_username(team_key)
+    if not username:
+        raise RuntimeError(f"CO portal username is not configured for team {team_key}")
+
     callsign = "CO Rood" if team_key == "red" else "CO Blauw"
-    email = f"{username}@game.invalid"
+    email = f"{username.lower()}@game.invalid"
 
     role = UserRoleModel.get_role_by_name(team["leader_role"])
     if not role:
@@ -303,7 +315,12 @@ def _ensure_co_qr_user(team_key):
     if isinstance(role, dict):
         raise RuntimeError(f"Could not create game role {team['leader_role']}")
 
-    user = UserModel.get_user_by_username(username)
+    # Portal users are normalized to lowercase by UserModel.create_user().
+    # Find an existing CO identity case-insensitively so CORood/COBLauw map to
+    # the same local account used by a normal portal login.
+    user = UserModel.query.filter(
+        db.func.lower(UserModel.username) == username.lower()
+    ).first()
     if not user:
         user = UserModel.create_user(
             username=username,
@@ -312,14 +329,14 @@ def _ensure_co_qr_user(team_key):
             roles=[role],
         )
     if isinstance(user, dict):
-        raise RuntimeError(f"Could not create CO QR user {username}")
+        raise RuntimeError(f"Could not create/find CO portal user {username}")
 
-    # This identity is dedicated to the QR and must never accumulate broader
-    # portal/admin privileges. The bearer QR grants exactly one game-leader role.
-    if [item.name for item in user.roles] != [team["leader_role"]]:
-        user.roles = [role]
+    # Preserve the user's normal database roles. get_user_roles() limits a
+    # QR-derived session to only game_<team>_leader, so normal logins are not
+    # stripped of permissions while the QR remains least-privilege.
+    if role not in user.roles:
+        user.roles.append(role)
     user.callsign = callsign
-    user.has_password = True
     db.session.add(user)
     db.session.commit()
     return user
@@ -349,11 +366,11 @@ def game_qr_login():
         if session_lifetime.total_seconds() < 60:
             session_lifetime = timedelta(minutes=1)
 
-        roles = [role.name for role in user.roles]
+        effective_roles = [team["leader_role"]]
         qr_version = _co_qr_version(team_key)
         claims = {
-            "username": user.username,
-            "roles": roles,
+            "username": _co_portal_username(team_key),
+            "roles": effective_roles,
             "game_qr_team": team_key,
             "game_qr_version": qr_version,
         }
@@ -374,7 +391,7 @@ def game_qr_login():
         current_app.logger.info(
             "CO QR login accepted for team %s as %s",
             team_key,
-            user.username,
+            _co_portal_username(team_key),
         )
         return jsonify({
             "access_token": access_token,
@@ -383,12 +400,18 @@ def game_qr_login():
             "expiresAt": cutoff.isoformat(),
             "user": {
                 "id": user.id,
-                "username": user.username,
+                "username": _co_portal_username(team_key),
                 "email": user.email,
                 "callsign": user.callsign,
                 "roles": [
-                    {"name": role.name, "displayName": role.display_name}
-                    for role in user.roles
+                    {
+                        "name": team["leader_role"],
+                        "displayName": (
+                            "Game Leader Red"
+                            if team_key == "red"
+                            else "Game Leader Blue"
+                        ),
+                    }
                 ],
                 "has_password": True,
             },
@@ -406,6 +429,7 @@ def _co_qr_admin_payload():
             "configured": bool(token),
             "url": _co_qr_public_url(team_key, token),
             "version": _co_qr_version(team_key),
+            "username": _co_portal_username(team_key),
         }
     return {"teams": teams}
 
