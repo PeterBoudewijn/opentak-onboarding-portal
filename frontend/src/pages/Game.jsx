@@ -209,6 +209,9 @@ function Game({ forcedTeam = null }) {
             {['red', 'blue'].map((teamKey) => (
               <div className="game-qr" key={teamKey}>
                 <h3>CO {TEAM_LABELS[teamKey]}</h3>
+                {coQr?.[teamKey]?.username && (
+                  <p>Automatisch inloggen als <strong>{coQr[teamKey].username}</strong></p>
+                )}
                 {coQr?.[teamKey]?.configured && coQr?.[teamKey]?.url ? (
                   <QRCodeSVG value={coQr[teamKey].url} size={240} level="H" />
                 ) : (
