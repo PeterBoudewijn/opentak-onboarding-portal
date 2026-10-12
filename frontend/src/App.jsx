@@ -42,6 +42,7 @@ import ClaimRadio from './pages/ClaimRadio';
 import Kiosk from './pages/Kiosk';
 import KioskLogin from './pages/KioskLogin';
 import Game from './pages/Game';
+import GameQrLogin from './pages/GameQrLogin';
 
 // Layout
 import Layout from './components/Layout';
@@ -216,9 +217,10 @@ function AppContent() {
             />
             <Route path="/reset-password" element={<ResetPassword />} />
 
-            {/* Kiosk routes - standalone, no auth wrappers */}
+            {/* Standalone routes - no normal auth wrapper */}
             <Route path="/kiosk" element={<Kiosk />} />
             <Route path="/kiosk-login/:sessionId" element={<KioskLogin />} />
+            <Route path="/co/:team" element={<GameQrLogin />} />
 
             {/* Set password route - for OIDC users who need to set a password */}
             <Route
@@ -259,6 +261,8 @@ function AppContent() {
               <Route path="claim-radio/:nodeId" element={<ClaimRadio />} />
               <Route path="game" element={<Game />} />
               <Route path="game/:team" element={<Game />} />
+              <Route path="red" element={<Game forcedTeam="red" />} />
+              <Route path="blue" element={<Game forcedTeam="blue" />} />
 
               {/* Admin routes */}
               <Route
