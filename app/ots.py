@@ -26,6 +26,7 @@ class OTSClient:
     _groups_members = _groups + "/members"
     _meshtastic = _apibase + "/meshtastic"
     _profiles = _apibase + "/profiles"
+    _missions = _apibase + "/missions"
 
 
     def __init__(self, url, username, password):
@@ -204,6 +205,42 @@ class OTSClient:
         
     def get_jobs(self):
         return self.request_handler(method="GET", endpoint=self._jobs)
+
+    def get_missions(self, page=None, page_size=None, name=None, guid=None, tool=None):
+        """Get missions from the OpenTAKServer administrator API."""
+        params = {}
+        if page is not None:
+            params["page"] = page
+        if page_size is not None:
+            params["per_page"] = page_size
+        if name is not None:
+            params["name"] = name
+        if guid is not None:
+            params["guid"] = guid
+        if tool is not None:
+            params["tool"] = tool
+        return self.request_handler(method="GET", endpoint=self._missions, params=params)
+
+    def create_mission(self, name, creator_uid, group_ids=None, description=None, tool="public"):
+        """Create or update a mission through the OpenTAKServer administrator API."""
+        body = {
+            "name": name,
+            "creator_uid": creator_uid,
+            "tool": tool,
+        }
+        if description is not None:
+            body["description"] = description
+        if group_ids is not None:
+            body["groups"] = list(group_ids)
+        return self.request_handler(method="POST", endpoint=self._missions, body=body)
+
+    def delete_mission(self, name):
+        """Delete a mission by name through the OpenTAKServer administrator API."""
+        return self.request_handler(
+            method="DELETE",
+            endpoint=self._missions,
+            params={"name": name},
+        )
 
     def get_points(self, page=None, page_size=None, callsign=None, uid=None):
         params = {}
