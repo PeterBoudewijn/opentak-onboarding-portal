@@ -221,12 +221,21 @@ class OTSClient:
             params["tool"] = tool
         return self.request_handler(method="GET", endpoint=self._missions, params=params)
 
-    def create_mission(self, name, creator_uid, group_ids=None, description=None, tool="public"):
+    def create_mission(
+        self,
+        name,
+        creator_uid,
+        group_ids=None,
+        description=None,
+        tool="public",
+        default_role="MISSION_SUBSCRIBER",
+    ):
         """Create or update a mission through the OpenTAKServer administrator API."""
         body = {
             "name": name,
             "creator_uid": creator_uid,
             "tool": tool,
+            "default_role": default_role,
         }
         if description is not None:
             body["description"] = description
