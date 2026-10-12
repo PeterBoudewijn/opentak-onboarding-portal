@@ -55,6 +55,11 @@ CORS_ORIGINS = str(environ.get('CORS_ORIGINS', '*'))
 GAME_PERMANENT_USERS_RED = _env_csv('GAME_PERMANENT_USERS_RED')
 GAME_PERMANENT_USERS_BLUE = _env_csv('GAME_PERMANENT_USERS_BLUE')
 
+# Permanent watch-only users. They receive team traffic through OUT membership
+# but are deliberately kept out of IN so their own PLI is not routed to the team.
+GAME_PERMANENT_OBSERVERS_RED = _env_csv('GAME_PERMANENT_OBSERVERS_RED')
+GAME_PERMANENT_OBSERVERS_BLUE = _env_csv('GAME_PERMANENT_OBSERVERS_BLUE')
+
 
 # Permanent bearer tokens used by the physical CO portal QR codes.
 # Generate these with scripts/installers/setup_game_co_qr_tokens.py.
