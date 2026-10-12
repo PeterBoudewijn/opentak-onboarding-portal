@@ -6,6 +6,8 @@ import { gameAPI } from '../services/api';
 import './Game.css';
 
 const TEAM_LABELS = { red: 'Rood', blue: 'Blauw' };
+const ATAK_APP_URL = 'https://play.google.com/store/apps/details?id=com.atakmap.app.civ';
+const ITAK_APP_URL = 'https://apps.apple.com/nl/app/itak/id1561656396';
 
 function formatRemaining(iso) {
   if (!iso) return '';
@@ -253,6 +255,33 @@ function Game({ forcedTeam = null }) {
         <div className="game-error">
           Dit account heeft geen toegang tot Team {TEAM_LABELS[requestedTeam] || requestedTeam}.
         </div>
+      )}
+
+      {!requestedTeamDenied && visibleTeams.length > 0 && (
+        <section className="game-card game-app-downloads">
+          <div className="game-card-title">
+            <div>
+              <span className="game-team-badge">APP INSTALLATIE</span>
+              <h2>TAK-app installeren</h2>
+            </div>
+          </div>
+          <p>
+            Heeft een speler de TAK-app nog niet? Scan eerst de juiste QR-code om de app
+            te installeren. Daarna kan de speler de team-QR hieronder scannen.
+          </p>
+          <div className="game-qr-grid">
+            <div className="game-qr">
+              <h3>Android / ATAK-CIV</h3>
+              <QRCodeSVG value={ATAK_APP_URL} size={200} level="M" />
+              <small>Opent ATAK-CIV in Google Play</small>
+            </div>
+            <div className="game-qr">
+              <h3>Apple / iTAK</h3>
+              <QRCodeSVG value={ITAK_APP_URL} size={200} level="M" />
+              <small>Opent iTAK in de Apple App Store</small>
+            </div>
+          </div>
+        </section>
       )}
 
       <div className="game-grid">

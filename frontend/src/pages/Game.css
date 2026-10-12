@@ -33,10 +33,5 @@
 .game-error { margin-bottom:1rem; padding:.8rem 1rem; border-radius:8px; background:#fee4e2; color:#912018; }
 @media (max-width: 650px) { .game-page { padding:1rem; } .game-header { flex-direction:column; } .game-grid { grid-template-columns:1fr; } }
 
-.game-itak-help { margin-top: .85rem; text-align: left; font-size: .9rem; color: #333; }
-.game-itak-help p { margin: .55rem 0; }
-.game-itak-help dl { margin: .6rem 0; display: grid; gap: .35rem; }
-.game-itak-help dl div { display: flex; justify-content: space-between; gap: 1rem; border-bottom: 1px solid #ddd; padding-bottom: .25rem; }
-.game-itak-help dt { color: #555; }
-.game-itak-help dd { margin: 0; font-weight: 700; }
-
+.game-app-downloads { margin-bottom: 1.5rem; }
+.game-app-downloads > p { color: var(--text-secondary); }
