@@ -305,14 +305,6 @@ function Game({ forcedTeam = null }) {
                       {itakQr ? <QRCodeSVG value={itakQr} size={240} level="M" /> : <p>Geen iTAK QR ontvangen.</p>}
                       <div className="game-itak-help">
                         <p><strong>QR op een ander scherm?</strong><br />Scan deze QR met iTAK.</p>
-                        <p><strong>Portal op dezelfde iPhone?</strong><br />Voeg de server handmatig toe:</p>
-                        <dl>
-                          <div><dt>Server</dt><dd>atak.3division.eu</dd></div>
-                          <div><dt>Poort</dt><dd>8089</dd></div>
-                          <div><dt>Beveiliging</dt><dd>SSL</dd></div>
-                        </dl>
-                        <p>Gebruik daarna de tijdelijke gebruikersnaam en het wachtwoord hierboven.</p>
-                        <p><strong>Teamkleur:</strong> voor gameaccounts wordt {team.teamColor} server-side afgedwongen voor uitgaand CoT-verkeer.</p>
                       </div>
                     </div>
                   </div>
