@@ -432,8 +432,15 @@ def game_admin_reset_co_qr(team_key):
 
     try:
         _rotate_co_qr_token(team_key)
-        current_app.logger.warning("Administrator rotated CO QR for team %s", team_key)
-        return jsonify(_co_qr_admin_payload()), 200
+        cleanup = _cleanup_tracked_team_sessions(team_key, "co_qr_reset")
+        payload = _co_qr_admin_payload()
+        payload["playerCleanup"] = cleanup
+        current_app.logger.warning(
+            "Administrator rotated CO QR for team %s and revoked %s temporary player session(s)",
+            team_key,
+            cleanup["sessionsClosed"],
+        )
+        return jsonify(payload), 207 if cleanup["failures"] else 200
     except Exception as exc:
         current_app.logger.exception("Failed to rotate CO QR for team %s", team_key)
         return jsonify({"error": f"CO QR reset failed: {exc}"}), 500
@@ -448,10 +455,20 @@ def game_admin_reset_all_co_qr():
         return error
 
     try:
+        cleanup_by_team = {}
+        failures = []
         for team_key in GAME_TEAMS:
             _rotate_co_qr_token(team_key)
-        current_app.logger.warning("Administrator rotated all CO QR codes")
-        return jsonify(_co_qr_admin_payload()), 200
+            cleanup = _cleanup_tracked_team_sessions(team_key, "co_qr_reset_all")
+            cleanup_by_team[team_key] = cleanup
+            failures.extend(cleanup["failures"])
+
+        payload = _co_qr_admin_payload()
+        payload["playerCleanup"] = cleanup_by_team
+        current_app.logger.warning(
+            "Administrator rotated all CO QR codes and revoked temporary player sessions"
+        )
+        return jsonify(payload), 207 if failures else 200
     except Exception as exc:
         current_app.logger.exception("Failed to rotate all CO QR codes")
         return jsonify({"error": f"CO QR reset failed: {exc}"}), 500
@@ -994,15 +1011,8 @@ def generate_game_access(team_key):
         return jsonify({"error": f"Failed to generate game access: {exc}"}), 500
 
 
-@api_v1.route("/game/admin/cleanup/<team_key>", methods=["POST"])
-@jwt_required()
-def cleanup_game_team(team_key):
-    error = _require_game_admin()
-    if error:
-        return error
-    if team_key not in GAME_TEAMS:
-        return jsonify({"error": "Unknown game team"}), 404
-
+def _cleanup_tracked_team_sessions(team_key, reason):
+    """Revoke every still-open temporary game session for one team."""
     state = _read_state()
     sessions = list(state["teams"][team_key].get("sessions", []))
     results = []
@@ -1012,22 +1022,39 @@ def cleanup_game_team(team_key):
         if session.get("closedAt"):
             continue
         try:
-            results.append(_revoke_session_credentials(team_key, session, "admin_cleanup"))
+            results.append(_revoke_session_credentials(team_key, session, reason))
         except Exception as exc:
-            failures.append({"username": session.get("username"), "error": str(exc)})
+            failures.append({
+                "team": team_key,
+                "username": session.get("username"),
+                "error": str(exc),
+            })
 
-    return jsonify({
+    return {
         "team": team_key,
         "sessionsClosed": len(results),
         "eudCount": sum(item.get("eudCount", 0) for item in results),
         "results": results,
         "failures": failures,
-        "hardEudDeleted": False,
-        "note": (
-            "Closed temporary OTS users are deleted once none of their EUDs is still connected. "
-            "Historic OTS EUD rows remain because OTS exposes no supported EUD DELETE API."
-        ),
-    }), 207 if failures else 200
+    }
+
+
+@api_v1.route("/game/admin/cleanup/<team_key>", methods=["POST"])
+@jwt_required()
+def cleanup_game_team(team_key):
+    error = _require_game_admin()
+    if error:
+        return error
+    if team_key not in GAME_TEAMS:
+        return jsonify({"error": "Unknown game team"}), 404
+
+    cleanup = _cleanup_tracked_team_sessions(team_key, "admin_cleanup")
+    cleanup["hardEudDeleted"] = False
+    cleanup["note"] = (
+        "Closed temporary OTS users are deleted once none of their EUDs is still connected. "
+        "Historic OTS EUD rows remain because OTS exposes no supported EUD DELETE API."
+    )
+    return jsonify(cleanup), 207 if cleanup["failures"] else 200
 
 
 @api_v1.route("/game/admin/cleanup", methods=["POST"])
@@ -1039,24 +1066,20 @@ def cleanup_all_game_teams():
 
     results = []
     failures = []
+    teams = {}
     for team_key in GAME_TEAMS:
-        state = _read_state()
-        sessions = list(state["teams"][team_key].get("sessions", []))
-        for session in sessions:
-            if session.get("closedAt"):
-                continue
-            try:
-                result = _revoke_session_credentials(team_key, session, "admin_cleanup_all")
-                result["team"] = team_key
-                results.append(result)
-            except Exception as exc:
-                failures.append({
-                    "team": team_key,
-                    "username": session.get("username"),
-                    "error": str(exc),
-                })
+        cleanup = _cleanup_tracked_team_sessions(team_key, "admin_cleanup_all")
+        teams[team_key] = cleanup
+        for result in cleanup["results"]:
+            result["team"] = team_key
+            results.append(result)
+        failures.extend(cleanup["failures"])
 
-    return jsonify({"results": results, "failures": failures}), 207 if failures else 200
+    return jsonify({
+        "teams": teams,
+        "results": results,
+        "failures": failures,
+    }), 207 if failures else 200
 
 
 @scheduler.task(
