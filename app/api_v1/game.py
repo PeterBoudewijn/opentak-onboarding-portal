@@ -16,6 +16,7 @@ Security model:
 
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
+import hmac
 import json
 import os
 import secrets
@@ -23,7 +24,7 @@ import string
 import threading
 
 from flask import current_app, jsonify, request
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import create_access_token, create_refresh_token, jwt_required
 
 from app.api_v1 import api_v1
 from app.extensions import scheduler
@@ -198,6 +199,145 @@ def _require_game_admin():
     if "administrator" not in set(get_user_roles()):
         return jsonify({"error": "Administrator role required"}), 403
     return None
+
+
+def _co_qr_token(team_key):
+    config_key = (
+        "GAME_CO_QR_TOKEN_RED"
+        if team_key == "red"
+        else "GAME_CO_QR_TOKEN_BLUE"
+    )
+    return str(current_app.config.get(config_key, "") or "").strip()
+
+
+def _ensure_co_qr_user(team_key):
+    """Create a least-privilege local identity used only by the physical CO QR."""
+    from app.models import db, UserModel, UserRoleModel
+
+    team = GAME_TEAMS[team_key]
+    username = "gameqrred" if team_key == "red" else "gameqrblue"
+    callsign = "CO Rood" if team_key == "red" else "CO Blauw"
+    email = f"{username}@game.invalid"
+
+    role = UserRoleModel.get_role_by_name(team["leader_role"])
+    if not role:
+        role = UserRoleModel.create_role(
+            team["leader_role"],
+            f"Access only to the {team_key} airsoft game portal",
+            f"Game Leader {team_key.title()}",
+        )
+    if isinstance(role, dict):
+        raise RuntimeError(f"Could not create game role {team['leader_role']}")
+
+    user = UserModel.get_user_by_username(username)
+    if not user:
+        user = UserModel.create_user(
+            username=username,
+            email=email,
+            callsign=callsign,
+            roles=[role],
+        )
+    if isinstance(user, dict):
+        raise RuntimeError(f"Could not create CO QR user {username}")
+
+    # This identity is dedicated to the QR and must never accumulate broader
+    # portal/admin privileges. The bearer QR grants exactly one game-leader role.
+    if [item.name for item in user.roles] != [team["leader_role"]]:
+        user.roles = [role]
+    user.callsign = callsign
+    user.has_password = True
+    db.session.add(user)
+    db.session.commit()
+    return user
+
+
+@api_v1.route("/game/qr-login", methods=["POST"])
+def game_qr_login():
+    """Exchange a permanent physical CO QR bearer token for a same-day portal login."""
+    data = request.get_json(silent=True) or {}
+    team_key = str(data.get("team", "")).lower().strip()
+    supplied_token = str(data.get("token", "")).strip()
+
+    if team_key not in GAME_TEAMS:
+        return jsonify({"error": "Unknown game team"}), 404
+
+    expected_token = _co_qr_token(team_key)
+    if not expected_token:
+        return jsonify({"error": "CO QR login is not configured for this team"}), 503
+    if not supplied_token or not hmac.compare_digest(supplied_token, expected_token):
+        return jsonify({"error": "Invalid CO QR code"}), 401
+
+    try:
+        user = _ensure_co_qr_user(team_key)
+        cutoff = _next_cutoff()
+        now = datetime.now(GAME_TZ)
+        session_lifetime = cutoff.astimezone(timezone.utc) - now.astimezone(timezone.utc)
+        if session_lifetime.total_seconds() < 60:
+            session_lifetime = timedelta(minutes=1)
+
+        roles = [role.name for role in user.roles]
+        claims = {
+            "username": user.username,
+            "roles": roles,
+            "game_qr_team": team_key,
+        }
+        access_token = create_access_token(
+            identity=str(user.id),
+            additional_claims=claims,
+            expires_delta=session_lifetime,
+        )
+        refresh_token = create_refresh_token(
+            identity=str(user.id),
+            additional_claims={"game_qr_team": team_key},
+            expires_delta=session_lifetime,
+        )
+
+        current_app.logger.info(
+            "CO QR login accepted for team %s as %s",
+            team_key,
+            user.username,
+        )
+        return jsonify({
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "redirectPath": f"/{team_key}",
+            "expiresAt": cutoff.isoformat(),
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "email": user.email,
+                "callsign": user.callsign,
+                "roles": [
+                    {"name": role.name, "displayName": role.display_name}
+                    for role in user.roles
+                ],
+                "has_password": True,
+            },
+        }), 200
+    except Exception as exc:
+        current_app.logger.exception("CO QR login failed for team %s", team_key)
+        return jsonify({"error": f"CO QR login failed: {exc}"}), 500
+
+
+@api_v1.route("/game/admin/co-qr", methods=["GET"])
+@jwt_required()
+def game_admin_co_qr():
+    """Return printable permanent CO QR URLs to a full portal administrator."""
+    error = _require_game_admin()
+    if error:
+        return error
+
+    # The production Vite app is intentionally published below /game/.
+    public_base = request.host_url.rstrip("/") + "/game"
+    teams = {}
+    for team_key in GAME_TEAMS:
+        token = _co_qr_token(team_key)
+        teams[team_key] = {
+            "configured": bool(token),
+            "url": f"{public_base}/co/{team_key}#{token}" if token else None,
+        }
+
+    return jsonify({"teams": teams}), 200
 
 
 def _ensure_group_exists(group_name):
