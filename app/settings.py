@@ -54,3 +54,9 @@ CORS_ORIGINS = str(environ.get('CORS_ORIGINS', '*'))
 # Use comma-separated usernames when more than one permanent account is needed.
 GAME_PERMANENT_USERS_RED = _env_csv('GAME_PERMANENT_USERS_RED')
 GAME_PERMANENT_USERS_BLUE = _env_csv('GAME_PERMANENT_USERS_BLUE')
+
+
+# Permanent bearer tokens used by the physical CO portal QR codes.
+# Generate these with scripts/installers/setup_game_co_qr_tokens.py.
+GAME_CO_QR_TOKEN_RED = str(environ.get('GAME_CO_QR_TOKEN_RED', '')).strip()
+GAME_CO_QR_TOKEN_BLUE = str(environ.get('GAME_CO_QR_TOKEN_BLUE', '')).strip()
