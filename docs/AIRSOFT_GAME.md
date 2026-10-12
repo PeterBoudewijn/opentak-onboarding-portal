@@ -68,6 +68,17 @@ The game page refreshes status every 30 seconds so new EUDs can receive the appr
 
 Group membership, not color, is the team security boundary.
 
+## Daily team missions
+
+The portal maintains one OpenTAKServer mission per team:
+
+- red -> mission `GameRed`, associated only with OTS group `GameRed`
+- blue -> mission `GameBlue`, associated only with OTS group `GameBlue`
+
+A mission guard runs every five minutes (offset from the membership guard) and creates either mission if it is missing. OpenTAKServer 1.7.13 requires a valid EUD UID as the technical mission owner; the portal prefers an EUD from the current/permanent team users and falls back to any existing OTS EUD. Mission visibility remains controlled by the mission's group association.
+
+At 23:00 `Europe/Amsterdam`, the old `GameRed` and `GameBlue` missions are deleted and immediately recreated. This gives each team a clean mission with a new mission GUID every day.
+
 ## 23:00 cutoff
 
 At 23:00 `Europe/Amsterdam`, the current session account for each team is:
@@ -76,6 +87,8 @@ At 23:00 `Europe/Amsterdam`, the current session account for each team is:
 - assigned a new random password;
 - deactivated;
 - marked closed in the portal state.
+
+In the same scheduled reset, the old `GameRed` and `GameBlue` missions are deleted and recreated with new GUIDs.
 
 That account is never reactivated. The next game receives a newly generated username.
 
