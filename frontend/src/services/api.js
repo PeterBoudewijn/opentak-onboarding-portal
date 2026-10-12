@@ -530,6 +530,10 @@ export const gameAPI = {
     api.post(`/game/admin/cleanup/${team}`),
   cleanupAll: () =>
     api.post('/game/admin/cleanup'),
+  qrLogin: (team, token) =>
+    axios.post(`${API_BASE_URL}/api/v1/game/qr-login`, { team, token }),
+  getCoQr: () =>
+    api.get('/game/admin/co-qr'),
 };
 
 // API Keys API
