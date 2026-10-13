@@ -44,9 +44,9 @@ cp -a "${ENV_FILE}" "${ENV_FILE}.bak.${timestamp}"
 
 # Permanent CO users send + receive in their own team.
 set_env_value "GAME_PERMANENT_USERS_RED" "CORood"
-# Keep the historical COBLauw account during migration so existing certificates
-# continue to work. New CO enrollments use the requested spelling COBlauw.
-set_env_value "GAME_PERMANENT_USERS_BLUE" "COBlauw,COBLauw"
+# The existing OTS account is historically spelled COBLauw. Keep that internal
+# identity stable so current certificates remain valid; the portal/callsign is COBlauw.
+set_env_value "GAME_PERMANENT_USERS_BLUE" "COBLauw"
 set_env_value "GAME_CO_PORTAL_USERNAME_RED" "CORood"
 set_env_value "GAME_CO_PORTAL_USERNAME_BLUE" "COBlauw"
 set_env_value "GAME_PUBLIC_TAK_HOST" "atak.3division.eu"
@@ -72,7 +72,7 @@ systemctl is-active --quiet "${PORTAL_SERVICE}"
 echo
 echo "Airsoft game portal deployment completed."
 echo "GameRed send+receive: CORood"
-echo "GameBlue send+receive: COBlauw (legacy COBLauw kept during migration)"
+echo "GameBlue send+receive: COBlauw (OTS identity: COBLauw)"
 echo "Watch-only on both teams (OUT only): 3DAdmin, 3DivisionGameMaster"
 echo "The portal automatically removes IN membership from watch-only observers."
 echo "CO login QR codes are created and reset by an administrator in the portal."
