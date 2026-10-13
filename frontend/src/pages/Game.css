@@ -116,3 +116,10 @@
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: .65rem;
 }
+
+.game-co-tak-link {
+  display: block;
+  box-sizing: border-box;
+  text-align: center;
+  text-decoration: none;
+}
