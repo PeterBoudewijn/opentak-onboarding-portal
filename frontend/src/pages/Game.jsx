@@ -29,6 +29,7 @@ function Game({ forcedTeam = null }) {
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState('');
   const [coQr, setCoQr] = useState(null);
+  const [coTakAccess, setCoTakAccess] = useState({});
   const [, setTick] = useState(0);
 
   const admin = isAdmin();
@@ -81,6 +82,34 @@ function Game({ forcedTeam = null }) {
       await loadStatus();
     } catch (err) {
       setError(err.response?.data?.error || 'Nieuwe toegang genereren is mislukt.');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const loginCoTak = async (team) => {
+    const displayName = team === 'red' ? 'CORood' : 'COBlauw';
+    setBusy(`co-tak-${team}`);
+    setError('');
+    try {
+      const response = await gameAPI.generateCoTakAccess(team);
+      const data = response.data || {};
+      setCoTakAccess((current) => ({ ...current, [team]: data }));
+
+      if (!data.takUrl) {
+        throw new Error('OpenTAKServer gaf geen ATAK-loginlink terug.');
+      }
+
+      // The CO explicitly pressed the button, so hand the same device over to
+      // ATAK's custom enrollment URL. If Android returns to the browser, a
+      // fallback link remains visible below the button.
+      window.location.href = data.takUrl;
+    } catch (err) {
+      setError(
+        err.response?.data?.error ||
+        err.message ||
+        `Inloggen als ${displayName} op de TAK-server is mislukt.`
+      );
     } finally {
       setBusy(null);
     }
@@ -306,6 +335,38 @@ function Game({ forcedTeam = null }) {
                 <div><dt>Volgende cutoff</dt><dd>{expiresAt ? new Date(expiresAt).toLocaleString('nl-NL') : '-'}</dd></div>
                 <div><dt>Resterend</dt><dd>{formatRemaining(expiresAt)}</dd></div>
               </dl>
+
+              {team.coTakLogin?.available && (
+                <div className="game-co-tak-login">
+                  <div>
+                    <span className="game-team-badge">CO TAK-LOGIN</span>
+                    <h3>{team.coTakLogin.username}</h3>
+                    <p>
+                      Je bent in het portal ingelogd als <strong>{team.coTakLogin.username}</strong>.
+                      Open ATAK op dit toestel en meld het aan op de TAK-server met
+                      teamkleur <strong>{team.teamColor}</strong> en Role <strong>HQ</strong>.
+                    </p>
+                    <p className="game-warning">
+                      Meerdere CO&apos;s mogen dit tegelijk gebruiken. Ieder toestel krijgt
+                      een eigen clientcertificaat onder dezelfde CO-identiteit.
+                    </p>
+                  </div>
+                  <button
+                    className="game-co-tak-button"
+                    disabled={busy !== null}
+                    onClick={() => loginCoTak(team.team)}
+                  >
+                    {busy === `co-tak-${team.team}`
+                      ? 'TAK-login openen...'
+                      : `Inloggen als ${team.coTakLogin.username}`}
+                  </button>
+                  {coTakAccess[team.team]?.takUrl && (
+                    <a className="game-co-tak-fallback" href={coTakAccess[team.team].takUrl}>
+                      ATAK opnieuw openen als {team.coTakLogin.username}
+                    </a>
+                  )}
+                </div>
+              )}
 
               {!generated && (
                 <div className="game-empty">
