@@ -3,6 +3,7 @@ import axios from 'axios';
 import { QRCodeSVG } from 'qrcode.react';
 import { useTranslation } from 'react-i18next';
 import { kioskAPI, settingsAPI } from '../services/api';
+import { authStorage } from '../services/authStorage';
 import ProgramRadioModal from '../components/ProgramRadioModal';
 import ConfigValidatorModal from '../components/ConfigValidatorModal';
 import EnrollRadioModal from '../components/EnrollRadioModal';
@@ -15,13 +16,13 @@ const KIOSK_SESSION_KEY = 'kiosk_session';
 
 function saveKioskSession(data) {
   sessionStorage.setItem(KIOSK_SESSION_KEY, JSON.stringify(data));
-  // Also write to localStorage so ProgramRadioModal/ConfigValidatorModal API calls work
-  localStorage.setItem('access_token', data.accessToken);
+  // Shared API helpers used by kiosk modals read the same per-tab auth storage.
+  authStorage.setTokens(data.accessToken, data.refreshToken);
 }
 
 function clearKioskSession() {
   sessionStorage.removeItem(KIOSK_SESSION_KEY);
-  localStorage.removeItem('access_token');
+  authStorage.clear();
 }
 
 function loadKioskSession() {
