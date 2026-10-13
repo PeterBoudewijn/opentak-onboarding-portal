@@ -14,6 +14,7 @@ OTS_RUN_USER="${OTS_RUN_USER:-team3d}"
 OTS_HOME="${OTS_HOME:-/home/team3d}"
 OTS_DATA_FOLDER="${OTS_DATA_FOLDER:-/home/team3d/ots-1713}"
 BACKUP_ROOT="${BACKUP_ROOT:-/var/backups/3division-airsoft}"
+BACKUP_LABEL="${BACKUP_LABEL:-}"
 VERIFY_BACKUP_AFTER_CREATE="${VERIFY_BACKUP_AFTER_CREATE:-1}"
 BACKUP_VERIFIER="${BACKUP_VERIFIER:-${PORTAL_ROOT}/scripts/installers/verify_3division_airsoft_backup.sh}"
 
@@ -51,8 +52,18 @@ done
 }
 
 install -d -m 700 "${BACKUP_ROOT}"
+
+if [[ -n "${BACKUP_LABEL}" && ! "${BACKUP_LABEL}" =~ ^[A-Za-z0-9._-]+$ ]]; then
+  echo "Invalid BACKUP_LABEL; use only letters, numbers, dot, underscore or dash." >&2
+  exit 2
+fi
+
 stamp="$(date +%Y%m%d-%H%M%S)"
-name="3division-airsoft-${stamp}"
+if [[ -n "${BACKUP_LABEL}" ]]; then
+  name="3division-airsoft-${BACKUP_LABEL}-${stamp}"
+else
+  name="3division-airsoft-${stamp}"
+fi
 stage="$(mktemp -d "${BACKUP_ROOT}/.${name}.XXXXXX")"
 archive="${BACKUP_ROOT}/${name}.tar.gz"
 bundle_tmp=""
