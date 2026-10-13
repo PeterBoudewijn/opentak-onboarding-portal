@@ -7,6 +7,7 @@ import { announcementsAPI, rolesAPI, usersAPI } from '../../services/api';
 import { useNotification } from '../../contexts/NotificationContext';
 import { useAuth } from '../../contexts/AuthContext';
 import '../../components/AdminTable.css';
+import SafeHtml from '../../components/SafeHtml';
 
 // Quill editor modules configuration
 const quillModules = {
@@ -525,7 +526,7 @@ function AnnouncementsList() {
                   </div>
                 )}
               </div>
-              <div
+              <SafeHtml
                 className="announcement-preview-content"
                 style={{
                   padding: '1rem',
@@ -534,7 +535,7 @@ function AnnouncementsList() {
                   background: 'white',
                   minHeight: '150px'
                 }}
-                dangerouslySetInnerHTML={{ __html: selectedAnnouncement.content }}
+                html={selectedAnnouncement.content}
               />
             </div>
             <div className="modal-footer">
