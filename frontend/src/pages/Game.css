@@ -60,3 +60,59 @@
   font-weight: 700;
   text-decoration: underline;
 }
+
+
+.game-co-atak-fallback {
+  display: grid;
+  gap: .5rem;
+}
+.game-itak-login {
+  display: grid;
+  gap: .85rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-color);
+}
+.game-itak-login h4 { margin: 0; }
+.game-itak-login p { margin: 0; }
+.game-itak-qr {
+  justify-self: center;
+  padding: .85rem;
+  background: white;
+  border-radius: 10px;
+}
+.game-itak-fields {
+  display: grid;
+  gap: .45rem;
+  margin: 0;
+}
+.game-itak-fields div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: .35rem;
+  border-bottom: 1px solid var(--border-color);
+}
+.game-itak-fields dt { color: var(--text-secondary); }
+.game-itak-fields dd {
+  margin: 0;
+  font-weight: 700;
+  text-align: right;
+  word-break: break-word;
+}
+.game-itak-token {
+  display: block;
+  max-height: 8rem;
+  overflow: auto;
+  padding: .75rem;
+  border-radius: 8px;
+  background: rgba(127,127,127,.12);
+  font-size: .78rem;
+  line-height: 1.35;
+  word-break: break-all;
+  user-select: all;
+}
+.game-itak-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: .65rem;
+}
