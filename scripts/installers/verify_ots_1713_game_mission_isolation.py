@@ -15,7 +15,7 @@ from opentakserver.models.Mission import Mission
 
 EXPECTED = {
     "CORood": {"GameRed": True, "GameBlue": False},
-    "COBLauw": {"GameRed": False, "GameBlue": True},
+    "COBlauw": {"GameRed": False, "GameBlue": True},
     "3DivisionGameMaster": {"GameRed": True, "GameBlue": True},
     "3DAdmin": {"GameRed": True, "GameBlue": True},
 }
