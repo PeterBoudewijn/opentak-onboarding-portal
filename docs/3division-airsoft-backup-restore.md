@@ -258,6 +258,46 @@ sudo systemctl restart opentak-portal
 sudo systemctl reload nginx
 ```
 
+## Automatische dagelijkse backups
+
+Installeer de systemd-timer:
+
+```bash
+sudo bash \
+  /opt/opentak-onboarding-portal/scripts/installers/install_3division_airsoft_backup_timer.sh
+```
+
+Standaard draait deze iedere dag om 02:30 Europe/Amsterdam. Iedere geplande backup wordt volledig geverifieerd voordat retentie wordt toegepast.
+
+Geplande backups krijgen een eigen naam:
+
+```text
+3division-airsoft-scheduled-YYYYMMDD-HHMMSS.tar.gz
+```
+
+Standaard blijven de 7 nieuwste geplande backups bewaard. Handmatige/golden backups zonder `scheduled` in de naam worden nooit door deze retentie verwijderd.
+
+Controleer de timer met:
+
+```bash
+systemctl list-timers 3division-airsoft-backup.timer
+systemctl status 3division-airsoft-backup.timer
+```
+
+Een geplande backup handmatig testen:
+
+```bash
+sudo systemctl start 3division-airsoft-backup.service
+sudo journalctl -u 3division-airsoft-backup.service -n 100 --no-pager
+```
+
+De retentie kan voor een handmatige run worden aangepast:
+
+```bash
+sudo AIRSOFT_BACKUP_RETENTION_COUNT=14 bash \
+  /opt/opentak-onboarding-portal/scripts/installers/run_3division_airsoft_scheduled_backup.sh
+```
+
 ## Aanbevolen bewaarbeleid
 
 - minimaal 1 recente backup off-host;
