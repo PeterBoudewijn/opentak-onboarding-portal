@@ -257,7 +257,7 @@ def create_announcement():
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error creating announcement: {str(e)}")
-        return jsonify({'error': f'Failed to create announcement: {str(e)}'}), 400
+        return jsonify({'error': 'Failed to create announcement'}), 400
 
 
 @api_v1.route('/admin/announcements/<int:announcement_id>', methods=['PUT'])
@@ -322,7 +322,7 @@ def update_announcement(announcement_id):
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error updating announcement: {str(e)}")
-        return jsonify({'error': f'Failed to update announcement: {str(e)}'}), 400
+        return jsonify({'error': 'Failed to update announcement'}), 400
 
 
 @api_v1.route('/admin/announcements/<int:announcement_id>', methods=['DELETE'])
@@ -367,7 +367,7 @@ def send_announcement_now(announcement_id):
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error sending announcement: {str(e)}")
-        return jsonify({'error': f'Failed to send announcement: {str(e)}'}), 400
+        return jsonify({'error': 'Failed to send announcement'}), 400
 
 
 # ==================== USER ENDPOINTS ====================
