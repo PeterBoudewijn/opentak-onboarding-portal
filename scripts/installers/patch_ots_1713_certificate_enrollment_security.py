@@ -178,11 +178,51 @@ def patch_enrollment(path: Path) -> bool:
             db.session.rollback()
             eud = db.session.execute(db.session.query(EUD).filter_by(uid=uid)).first()[0]
             if eud.user_id and eud.user_id != user.id:
-                logger.warning(
-                    "Rejected enrollment for EUD %s owned by another user",
-                    uid,
+                # Arbitrary EUD ownership changes remain blocked. The airsoft
+                # workflow needs one narrow exception: a physical device that
+                # was enrolled as a temporary player may later become a
+                # permanent CORood/COBlauw device. Also allow the historical
+                # COBLauw -> COBlauw spelling migration.
+                previous_user = eud.user
+                previous_username = (
+                    str(previous_user.username)
+                    if previous_user and previous_user.username
+                    else ""
                 )
-                return jsonify({"error": "EUD UID belongs to another user"}), 403
+                requested_username = str(user.username or "")
+                re_mod = __import__("re")
+
+                target_is_co = requested_username.casefold() in ("corood", "coblauw")
+                previous_is_temp_game = bool(
+                    re_mod.fullmatch(
+                        r"(?:rood|blauw)\\d{4}",
+                        previous_username,
+                        re_mod.IGNORECASE,
+                    )
+                )
+                blue_legacy_migration = (
+                    requested_username == "COBlauw"
+                    and previous_username == "COBLauw"
+                )
+
+                if target_is_co and (previous_is_temp_game or blue_legacy_migration):
+                    logger.warning(
+                        "Reassigning EUD %s from %s to permanent CO %s",
+                        uid,
+                        previous_username or "<unknown>",
+                        requested_username,
+                    )
+                    eud.user_id = user.id
+                    db.session.add(eud)
+                    db.session.commit()
+                else:
+                    logger.warning(
+                        "Rejected enrollment for EUD %s owned by %s; requested by %s",
+                        uid,
+                        previous_username or "<unknown>",
+                        requested_username,
+                    )
+                    return jsonify({"error": "EUD UID belongs to another user"}), 403
             if user and not eud.user_id:
                 eud.user_id = user.id
                 db.session.add(eud)
