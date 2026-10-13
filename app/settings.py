@@ -73,3 +73,5 @@ GAME_CO_QR_TOKEN_BLUE = str(environ.get('GAME_CO_QR_TOKEN_BLUE', '')).strip()
 # Shared same-day ATAK enrollment for multiple CO devices. The token expires
 # at the normal 23:00 game cutoff; each device gets its own certificate/EUD.
 GAME_CO_TAK_MAX_USES = int(environ.get('GAME_CO_TAK_MAX_USES', '250'))
+GAME_PUBLIC_TAK_HOST = str(environ.get('GAME_PUBLIC_TAK_HOST', '')).strip()
+GAME_TAK_STREAM_PORT = int(environ.get('GAME_TAK_STREAM_PORT', '8089'))
