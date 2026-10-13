@@ -107,3 +107,27 @@ def test_sync_co_hq_profiles_sets_team_role_and_callsign(monkeypatch):
     ]
     assert all(call["eud_uid"] == "device-1" for call in calls)
     assert all(call["connection"] is True for call in calls)
+
+
+
+def test_co_atak_url_is_rewritten_to_public_host(app):
+    with app.test_request_context("/game/red"):
+        app.config["GAME_PUBLIC_TAK_HOST"] = "atak.3division.eu"
+        value = game._normalize_atak_enrollment_url(
+            "tak://com.atakmap.app/enroll?host=127.0.0.1&username=CORood&token=abc.def",
+            username="CORood",
+        )
+
+    assert "host=atak.3division.eu" in value
+    assert "username=CORood" in value
+    assert "token=abc.def" in value
+    assert "127.0.0.1" not in value
+
+
+def test_itak_quick_connect_uses_public_host_and_stream_port(app):
+    with app.test_request_context("/game/red"):
+        app.config["GAME_PUBLIC_TAK_HOST"] = "atak.3division.eu"
+        app.config["GAME_TAK_STREAM_PORT"] = 8089
+        value = game._itak_quick_connect()
+
+    assert value == "OpenTAKServer_atak.3division.eu,atak.3division.eu,8089,SSL"
