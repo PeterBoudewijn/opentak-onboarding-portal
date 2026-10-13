@@ -94,9 +94,9 @@ function Login() {
       oidcLogin(oidcToken, oidcRefresh).then((result) => {
         if (result.success) {
           // Check for pending kiosk session
-          const kioskSession = localStorage.getItem('kiosk_session_pending');
+          const kioskSession = sessionStorage.getItem('kiosk_session_pending');
           if (kioskSession) {
-            localStorage.removeItem('kiosk_session_pending');
+            sessionStorage.removeItem('kiosk_session_pending');
             navigate(`/kiosk-login/${kioskSession}`);
           } else {
             navigateAfterLogin(needsPassword, needsProfile);
