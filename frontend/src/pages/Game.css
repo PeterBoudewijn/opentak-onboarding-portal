@@ -123,3 +123,82 @@
   text-align: center;
   text-decoration: none;
 }
+
+
+.game-co-devices-card { margin-bottom: 1.5rem; }
+.game-co-device-teams {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.game-co-device-team {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1rem;
+}
+.game-co-device-team-red { border-top: 5px solid #c93434; }
+.game-co-device-team-blue { border-top: 5px solid #2f68c5; }
+.game-co-device-team-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: .75rem;
+  margin-bottom: .85rem;
+}
+.game-co-device-team-title h3 { margin: .25rem 0 0; }
+.game-co-device-list { display: grid; gap: .8rem; }
+.game-co-device {
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: .85rem;
+  background: rgba(127,127,127,.06);
+}
+.game-co-device-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: .75rem;
+  margin-bottom: .7rem;
+}
+.game-device-status {
+  padding: .22rem .5rem;
+  border-radius: 999px;
+  font-size: .75rem;
+  font-weight: 800;
+}
+.game-device-status.connected {
+  background: rgba(34, 197, 94, .16);
+  color: #166534;
+}
+.game-device-status.disconnected {
+  background: rgba(127,127,127,.16);
+  color: var(--text-secondary);
+}
+.game-co-device-meta {
+  display: grid;
+  gap: .35rem;
+  margin: 0 0 .8rem;
+}
+.game-co-device-meta div {
+  display: grid;
+  grid-template-columns: 105px minmax(0, 1fr);
+  gap: .65rem;
+}
+.game-co-device-meta dt { color: var(--text-secondary); }
+.game-co-device-meta dd {
+  margin: 0;
+  text-align: right;
+  word-break: break-word;
+}
+.game-device-uid {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: .8rem;
+}
+.game-co-device .game-danger { width: 100%; }
+@media (max-width: 650px) {
+  .game-co-device-teams { grid-template-columns: 1fr; }
+  .game-co-device-team-title { flex-direction: column; }
+  .game-co-device-meta div { grid-template-columns: 1fr; gap: .1rem; }
+  .game-co-device-meta dd { text-align: left; }
+}
