@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { gameAPI } from '../services/api';
+import { authStorage } from '../services/authStorage';
 import './Auth.css';
 
 function GameQrLogin() {
@@ -22,9 +23,8 @@ function GameQrLogin() {
 
     gameAPI.qrLogin(normalizedTeam, secret)
       .then((response) => {
-        localStorage.setItem('access_token', response.data.access_token);
-        localStorage.setItem('refresh_token', response.data.refresh_token);
-        localStorage.setItem('user', JSON.stringify(response.data.user));
+        authStorage.setTokens(response.data.access_token, response.data.refresh_token);
+        authStorage.setUser(response.data.user);
 
         const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
         window.location.replace(`${base}${response.data.redirectPath}`);
