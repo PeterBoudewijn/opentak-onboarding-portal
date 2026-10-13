@@ -72,6 +72,7 @@ echo "Applying OpenTAKServer CO enrollment patches..."
 "${OTS_PYTHON}" "${PORTAL_ROOT}/scripts/installers/patch_ots_1713_co_hq_profiles.py"
 "${OTS_PYTHON}" "${PORTAL_ROOT}/scripts/installers/patch_ots_1713_co_device_handover.py"
 "${OTS_PYTHON}" "${PORTAL_ROOT}/scripts/installers/patch_ots_1713_co_device_restore_cleanup.py"
+"${OTS_PYTHON}" "${PORTAL_ROOT}/scripts/installers/patch_ots_1713_co_device_restore_history.py"
 
 echo "Building frontend..."
 cd "${PORTAL_ROOT}/frontend"
