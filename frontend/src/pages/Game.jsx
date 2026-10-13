@@ -458,7 +458,7 @@ function Game({ forcedTeam = null }) {
 
                       <dl className="game-itak-fields">
                         <div>
-                          <dt>Server</dt>
+                          <dt>Server Address</dt>
                           <dd>{coTakAccess[team.team].itak.host}</dd>
                         </div>
                         <div>
@@ -468,17 +468,17 @@ function Game({ forcedTeam = null }) {
                           </dd>
                         </div>
                         <div>
-                          <dt>Gebruiker</dt>
+                          <dt>Username</dt>
                           <dd>{coTakAccess[team.team].itak.username}</dd>
                         </div>
                       </dl>
 
                       <p>
                         In iTAK: <strong>Settings → Network → Servers → +</strong>. Gebruik
-                        bovenstaande server, poort en SSL. Schakel <strong>Authentication</strong>
+                        bovenstaande Server Address, poort en SSL. Schakel <strong>Authentication</strong>
                         en <strong>Enroll for Client Certificate</strong> in. Gebruik de
-                        gebruikersnaam hierboven en onderstaande tijdelijke enrollmentcode als
-                        wachtwoord. De permanente CO-wachtwoorden worden niet gedeeld.
+                        <strong>Username</strong> hierboven en onderstaande tijdelijke
+                        <strong>Password</strong>. De permanente CO-wachtwoorden worden niet gedeeld.
                       </p>
 
                       <code className="game-itak-token">
@@ -490,19 +490,19 @@ function Game({ forcedTeam = null }) {
                           type="button"
                           onClick={() => copyText(coTakAccess[team.team].itak.host)}
                         >
-                          Kopieer server
+                          Kopieer Server Address
                         </button>
                         <button
                           type="button"
                           onClick={() => copyText(coTakAccess[team.team].itak.username)}
                         >
-                          Kopieer gebruikersnaam
+                          Kopieer Username
                         </button>
                         <button
                           type="button"
                           onClick={() => copyText(coTakAccess[team.team].itak.enrollmentCode)}
                         >
-                          Kopieer enrollmentcode
+                          Kopieer Password
                         </button>
                         <button
                           type="button"
@@ -513,7 +513,7 @@ function Game({ forcedTeam = null }) {
                       </div>
 
                       <p className="game-warning">
-                        Deze enrollmentcode verloopt uiterlijk om 23:00. Na succesvolle
+                        Dit tijdelijke Password verloopt uiterlijk om 23:00. Na succesvolle
                         enrollment gebruikt iTAK het eigen clientcertificaat van dit toestel.
                       </p>
                     </div>
