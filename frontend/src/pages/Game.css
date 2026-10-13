@@ -35,3 +35,28 @@
 
 .game-app-downloads { margin-bottom: 1.5rem; }
 .game-app-downloads > p { color: var(--text-secondary); }
+
+
+.game-co-tak-login {
+  display: grid;
+  gap: .85rem;
+  margin: 1rem 0 1.25rem;
+  padding: 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: rgba(127,127,127,.08);
+}
+.game-co-tak-login h3 { margin: .25rem 0 .35rem; }
+.game-co-tak-login p { margin: 0; }
+.game-co-tak-button {
+  width: 100%;
+  background: #1769aa;
+  color: white;
+  font-size: 1rem;
+}
+.game-co-tak-fallback {
+  display: block;
+  text-align: center;
+  font-weight: 700;
+  text-decoration: underline;
+}
