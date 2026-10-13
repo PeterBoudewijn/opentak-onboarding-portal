@@ -427,6 +427,21 @@ class OTSClient:
             body["max"] = max_uses
         return self.request_handler(method="POST", endpoint=self._itak_qr_string, body=body)
 
+    def get_device_profiles(self, page=1, page_size=500, preference_key=None,
+                            preference_value=None, tool=None):
+        """Get OTS device profiles, optionally filtered by exact profile fields."""
+        params = {
+            "page": page,
+            "per_page": page_size,
+        }
+        if preference_key is not None:
+            params["preference_key"] = preference_key
+        if preference_value is not None:
+            params["preference_value"] = preference_value
+        if tool is not None:
+            params["tool"] = tool
+        return self.request_handler(method="GET", endpoint=self._profiles, params=params)
+
     def create_device_profile(self, preference_key, preference_value, value_class,
                               enrollment=False, connection=True, active=True, eud_uid=None):
         """Create or update an OTS device profile using its form-based API."""
