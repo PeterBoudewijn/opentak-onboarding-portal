@@ -54,6 +54,12 @@ set_env_value "GAME_CO_PORTAL_USERNAME_BLUE" "COBlauw"
 set_env_value "GAME_PUBLIC_TAK_HOST" "atak.3division.eu"
 set_env_value "GAME_TAK_STREAM_PORT" "8089"
 
+# Production browser/session hardening. The portal is served only from this
+# HTTPS origin; do not allow arbitrary cross-origin credentialed API access.
+set_env_value "CORS_ORIGINS" "https://atak.3division.eu"
+set_env_value "SESSION_COOKIE_SECURE" "True"
+set_env_value "SESSION_COOKIE_SAMESITE" "Lax"
+
 # Watch-only users receive both teams but never get IN membership, so their own
 # PLI is not routed into GameRed/GameBlue.
 set_env_value "GAME_PERMANENT_OBSERVERS_RED" "3DAdmin,3DivisionGameMaster"
