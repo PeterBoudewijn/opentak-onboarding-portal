@@ -311,7 +311,9 @@ then
   pass "exact GameRed/GameBlue membership directions"
 else
   fail "GameRed/GameBlue membership directions"
-  grep -E '^(PASS|FAIL) ' "${MEMBERSHIP_OUT}" || true
+  echo "--- membership verifier output ---"
+  cat "${MEMBERSHIP_OUT}"
+  echo "--- end membership verifier output ---"
 fi
 rm -f "${MEMBERSHIP_OUT}"
 
@@ -320,7 +322,9 @@ if env HOME=/home/team3d OTS_DATA_FOLDER="${OTS_DATA_FOLDER}" "${OTS_PYTHON}"   
   pass "strict mission isolation verifier"
 else
   fail "strict mission isolation verifier"
-  grep -E '^(PASS|FAIL|RESULT:)' "${MISSION_OUT}" || true
+  echo "--- mission verifier output ---"
+  cat "${MISSION_OUT}"
+  echo "--- end mission verifier output ---"
 fi
 rm -f "${MISSION_OUT}"
 
