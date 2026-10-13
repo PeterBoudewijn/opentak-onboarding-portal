@@ -23,6 +23,7 @@ import os
 import secrets
 import string
 import threading
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from flask import current_app, jsonify, request
 from flask_jwt_extended import create_access_token, create_refresh_token, get_jwt, jwt_required
@@ -305,6 +306,74 @@ def _co_display_username(team_key):
     return GAME_TEAMS[team_key]["co_display_username"]
 
 
+def _public_tak_host():
+    """Return the externally reachable TAK hostname, never an internal OTS URL."""
+    configured = str(current_app.config.get("GAME_PUBLIC_TAK_HOST", "") or "").strip()
+    if configured:
+        return configured.split(":", 1)[0].strip()
+
+    forwarded = str(request.headers.get("X-Forwarded-Host") or request.host or "").strip()
+    host = forwarded.split(",", 1)[0].strip()
+    if host.startswith("["):
+        return host.split("]", 1)[0].lstrip("[")
+    return host.split(":", 1)[0].strip()
+
+
+def _normalize_atak_enrollment_url(qr_string, username=None):
+    """Rewrite OTS-generated ATAK enrollment URLs to the public game hostname."""
+    if not qr_string:
+        return None
+
+    parts = urlsplit(str(qr_string).strip())
+    if parts.scheme != "tak" or parts.netloc != "com.atakmap.app" or parts.path != "/enroll":
+        raise RuntimeError("OpenTAKServer returned an invalid ATAK enrollment URL")
+
+    params = dict(parse_qsl(parts.query, keep_blank_values=True))
+    params["host"] = _public_tak_host()
+    if username:
+        params["username"] = username
+
+    if not params.get("username") or not params.get("token"):
+        raise RuntimeError("OpenTAKServer ATAK enrollment URL is missing credentials")
+
+    return urlunsplit((
+        parts.scheme,
+        parts.netloc,
+        parts.path,
+        urlencode(params),
+        parts.fragment,
+    ))
+
+
+def _atak_enrollment_fields(qr_string):
+    parts = urlsplit(qr_string)
+    params = dict(parse_qsl(parts.query, keep_blank_values=True))
+    return {
+        "host": params.get("host"),
+        "username": params.get("username"),
+        "token": params.get("token"),
+    }
+
+
+def _itak_quick_connect():
+    host = _public_tak_host()
+    port = int(current_app.config.get("GAME_TAK_STREAM_PORT", 8089))
+    return f"OpenTAKServer_{host},{host},{port},SSL"
+
+
+def _find_ots_username_exact(username):
+    if not username:
+        return None
+    try:
+        response = otsClient.get_users(username=username, page_size=100)
+    except Exception:
+        return None
+    for item in _response_results(response):
+        if isinstance(item, dict) and item.get("username") == username:
+            return username
+    return None
+
+
 def _find_ots_username_casefold(username):
     """Return the stored OTS username while tolerating historical case spelling."""
     if not username:
@@ -337,14 +406,47 @@ def _find_ots_username_casefold(username):
 
 
 def _co_ots_username(team_key):
-    """Resolve the actual OTS account behind the friendly CO display identity."""
-    requested = _co_portal_username(team_key) or _co_display_username(team_key)
-    stored = _find_ots_username_casefold(requested)
+    """Resolve the preferred actual OTS account behind the CO identity."""
+    requested = _co_display_username(team_key)
+
+    # Prefer the exact requested spelling for all new enrollments.
+    exact = _find_ots_username_exact(requested)
+    if exact:
+        return exact
+
+    # Red already exists as CORood. Blue historically existed as COBLauw;
+    # tolerate that identity until the migration helper creates COBlauw.
+    configured = _co_portal_username(team_key) or requested
+    stored = _find_ots_username_casefold(configured)
+    if not stored:
+        stored = _find_ots_username_casefold(requested)
     if not stored:
         raise RuntimeError(
             f"OTS CO account {requested} does not exist for team {team_key}"
         )
     return stored
+
+
+def _ensure_co_ots_user(team_key):
+    """Ensure new CO enrollments use the exact CORood/COBlauw OTS identity."""
+    desired = _co_display_username(team_key)
+    existing = _find_ots_username_exact(desired)
+    if existing:
+        _ensure_team_isolation(team_key, existing)
+        otsClient.activate_user(existing)
+        return existing
+
+    # For blue this creates COBlauw while preserving legacy COBLauw so old
+    # certificates continue to function during the migration.
+    otsClient.create_user(desired, _random_password(), roles=["user"])
+    _ensure_team_isolation(team_key, desired)
+    otsClient.activate_user(desired)
+    current_app.logger.warning(
+        "Created exact permanent CO OTS identity %s for team %s",
+        desired,
+        team_key,
+    )
+    return desired
 
 
 def _ensure_co_qr_user(team_key):
@@ -1269,7 +1371,7 @@ def game_status():
 @api_v1.route("/game/<team_key>/co-tak-access", methods=["POST"])
 @jwt_required()
 def generate_co_tak_access(team_key):
-    """Return same-day ATAK enrollment for the permanent CO identity."""
+    """Return same-day enrollment data for ATAK and iTAK CO devices."""
     error = _require_team_access(team_key)
     if error:
         return error
@@ -1281,7 +1383,7 @@ def generate_co_tak_access(team_key):
         }), 403
 
     try:
-        username = _co_ots_username(team_key)
+        username = _ensure_co_ots_user(team_key)
         cutoff = _next_cutoff()
         expires_at = int(cutoff.timestamp())
         max_uses = int(current_app.config.get("GAME_CO_TAK_MAX_USES", 250))
@@ -1298,14 +1400,14 @@ def generate_co_tak_access(team_key):
             payload = {}
 
         reusable = False
-        qr_string = payload.get("qr_string")
+        raw_qr_string = payload.get("qr_string")
         try:
             exp = int(float(payload.get("exp") or 0))
             total_uses = int(payload.get("total_uses") or 0)
             existing_max = payload.get("max")
             existing_max = int(existing_max) if existing_max is not None else None
             reusable = (
-                bool(qr_string)
+                bool(raw_qr_string)
                 and not bool(payload.get("disabled"))
                 and abs(exp - expires_at) <= 120
                 and exp > int(datetime.now(timezone.utc).timestamp()) + 30
@@ -1315,30 +1417,57 @@ def generate_co_tak_access(team_key):
             reusable = False
 
         if not reusable:
+            # OTS reuses the same Token DB row per username and otherwise keeps
+            # total_uses. Delete first so a new game-day token starts at zero.
+            try:
+                otsClient.delete_atak_qr_string(username)
+            except Exception:
+                pass
+
             created = otsClient.create_atak_qr_string(
                 username=username,
                 exp=expires_at,
                 max_uses=max_uses,
             )
             payload = _response_payload(created)
-            qr_string = payload.get("qr_string")
+            raw_qr_string = payload.get("qr_string")
 
-        if not qr_string:
-            raise RuntimeError("OpenTAKServer returned no ATAK enrollment URL")
+        tak_url = _normalize_atak_enrollment_url(raw_qr_string, username=username)
+        fields = _atak_enrollment_fields(tak_url)
+        token = fields.get("token")
+        if not token:
+            raise RuntimeError("OpenTAKServer returned no enrollment token")
 
         current_app.logger.info(
-            "Issued/reused CO ATAK enrollment for %s as %s (role HQ)",
+            "Issued/reused CO TAK enrollment for %s as %s (role HQ, public host %s)",
             team_key,
             username,
+            fields.get("host"),
         )
         return jsonify({
             "team": team_key,
             "username": _co_display_username(team_key),
-            "takUrl": qr_string,
+            "serverUsername": username,
+            "takUrl": tak_url,
             "role": "HQ",
             "teamColor": GAME_TEAMS[team_key]["team_color"],
             "expiresAt": cutoff.isoformat(),
             "multipleDevicesAllowed": True,
+            "atak": {
+                "url": tak_url,
+                "host": fields.get("host"),
+                "username": username,
+            },
+            "itak": {
+                "quickConnect": _itak_quick_connect(),
+                "host": _public_tak_host(),
+                "port": int(current_app.config.get("GAME_TAK_STREAM_PORT", 8089)),
+                "protocol": "SSL",
+                "username": username,
+                # OTS enrollment accepts the same bounded token in the Basic
+                # Auth password field, so iTAK never needs the permanent CO password.
+                "enrollmentCode": token,
+            },
         }), 200
     except Exception as exc:
         current_app.logger.exception("Failed to generate CO TAK access for %s", team_key)
