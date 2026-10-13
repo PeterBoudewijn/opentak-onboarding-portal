@@ -1399,6 +1399,182 @@ def game_status():
     }), 200
 
 
+def _co_device_profile_map():
+    """Return internal CO certificate-window state keyed by EUD UID."""
+    values = {}
+    for preference_key in (
+        "airsoftCoCertificateSerial",
+        "airsoftCoValidUntil",
+    ):
+        try:
+            response = otsClient.get_device_profiles(
+                page=1,
+                page_size=500,
+                preference_key=preference_key,
+            )
+        except Exception:
+            current_app.logger.exception(
+                "Failed to load CO device profile %s",
+                preference_key,
+            )
+            continue
+
+        for profile in _response_results(response):
+            if not isinstance(profile, dict):
+                continue
+            uid = str(profile.get("eud_uid") or "").strip()
+            if not uid:
+                continue
+            values.setdefault(uid, {})[preference_key] = profile.get("preference_value")
+    return values
+
+
+def _co_devices_admin_payload():
+    """Build an administrator-only view of EUDs currently owned by CO accounts."""
+    profile_values = _co_device_profile_map()
+    now_epoch = int(datetime.now(timezone.utc).timestamp())
+    teams = {}
+
+    for team_key in GAME_TEAMS:
+        username = _co_ots_username(team_key)
+        devices = []
+
+        for eud in _get_user_euds(username):
+            uid = str(eud.get("uid") or "").strip()
+            if not uid:
+                continue
+
+            profiles = profile_values.get(uid, {})
+            raw_until = profiles.get("airsoftCoValidUntil")
+            try:
+                valid_until_epoch = int(str(raw_until)) if raw_until is not None else None
+            except (TypeError, ValueError):
+                valid_until_epoch = None
+
+            revoked = valid_until_epoch is not None and valid_until_epoch <= 0
+            expired = (
+                valid_until_epoch is not None
+                and valid_until_epoch > 0
+                and valid_until_epoch <= now_epoch
+            )
+            valid_until = (
+                datetime.fromtimestamp(valid_until_epoch, timezone.utc)
+                .astimezone(GAME_TZ)
+                .isoformat()
+                if valid_until_epoch and valid_until_epoch > 0
+                else None
+            )
+            status = str(eud.get("last_status") or "Unknown")
+
+            devices.append({
+                "uid": uid,
+                "callsign": eud.get("callsign"),
+                "device": eud.get("device"),
+                "platform": eud.get("platform"),
+                "os": eud.get("os"),
+                "version": eud.get("version"),
+                "status": status,
+                "connected": status.casefold() == "connected",
+                "lastSeen": eud.get("last_event_time"),
+                "certificateWindowBound": bool(
+                    profiles.get("airsoftCoCertificateSerial")
+                    and valid_until_epoch is not None
+                ),
+                "validUntil": valid_until,
+                "revoked": revoked,
+                "expired": expired,
+            })
+
+        devices.sort(
+            key=lambda item: (
+                not item["connected"],
+                str(item.get("callsign") or ""),
+                item["uid"],
+            )
+        )
+        teams[team_key] = {
+            "team": team_key,
+            "username": _co_display_username(team_key),
+            "serverUsername": username,
+            "connectedCount": sum(1 for item in devices if item["connected"]),
+            "deviceCount": len(devices),
+            "devices": devices,
+        }
+
+    return {
+        "timezone": "Europe/Amsterdam",
+        "teams": teams,
+    }
+
+
+@api_v1.route("/game/admin/co-devices", methods=["GET"])
+@jwt_required()
+def game_admin_co_devices():
+    """Show CO-owned TAK devices to a full portal administrator."""
+    error = _require_game_admin()
+    if error:
+        return error
+
+    try:
+        return jsonify(_co_devices_admin_payload()), 200
+    except Exception:
+        current_app.logger.exception("Failed to load administrator CO device view")
+        return jsonify({"error": "CO-apparaten konden niet worden geladen"}), 500
+
+
+@api_v1.route("/game/admin/co-devices/<team_key>/<path:eud_uid>/revoke", methods=["POST"])
+@jwt_required()
+def game_admin_revoke_co_device(team_key, eud_uid):
+    """Expire the current CO certificate authorization for exactly one EUD."""
+    error = _require_game_admin()
+    if error:
+        return error
+    if team_key not in GAME_TEAMS:
+        return jsonify({"error": "Unknown game team"}), 404
+
+    try:
+        username = _co_ots_username(team_key)
+        owned_uids = {
+            str(eud.get("uid") or "")
+            for eud in _get_user_euds(username)
+            if eud.get("uid")
+        }
+        if eud_uid not in owned_uids:
+            return jsonify({"error": "EUD does not belong to this CO account"}), 404
+
+        otsClient.create_device_profile(
+            preference_key="airsoftCoValidUntil",
+            preference_value="0",
+            value_class="class java.lang.String",
+            enrollment=False,
+            connection=False,
+            active=False,
+            eud_uid=eud_uid,
+        )
+
+        current_app.logger.warning(
+            "Administrator revoked current CO certificate access for team %s EUD %s",
+            team_key,
+            eud_uid,
+        )
+        return jsonify({
+            "success": True,
+            "team": team_key,
+            "uid": eud_uid,
+            "note": (
+                "Current CO certificate access is expired. A new authenticated "
+                "CO enrollment may authorize this device again."
+            ),
+        }), 200
+    except Exception:
+        current_app.logger.exception(
+            "Failed to revoke CO device %s for team %s",
+            eud_uid,
+            team_key,
+        )
+        return jsonify({"error": "CO-toegang intrekken is mislukt"}), 500
+
+
 @api_v1.route("/game/<team_key>/co-tak-access", methods=["POST"])
 @jwt_required()
 def generate_co_tak_access(team_key):
