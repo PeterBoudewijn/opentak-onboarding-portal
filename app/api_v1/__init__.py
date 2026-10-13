@@ -40,6 +40,7 @@ def restrict_game_qr_session_scope():
         "/api/v1/auth/refresh",
         "/api/v1/game/status",
         f"/api/v1/game/{team_key}/access",
+        f"/api/v1/game/{team_key}/co-tak-access",
     }
 
     if request.path in allowed_paths:
