@@ -136,16 +136,21 @@ verify_db_backup "OTS DB" "${ots_db_backend}" "${tmp}/database/ots.dump" "${tmp}
 
 echo
 echo "========== OTS DATA / CA =========="
-if [[ -f "${tmp}/ots/ots-data.tar.gz" ]] && tar -tzf "${tmp}/ots/ots-data.tar.gz" >/dev/null; then
+OTS_LIST="${tmp}/ots-data-list.txt"
+if [[ -f "${tmp}/ots/ots-data.tar.gz" ]] && tar -tzf "${tmp}/ots/ots-data.tar.gz" >"${OTS_LIST}"; then
   pass "OTS data archive readable"
   ots_base="$(basename "${ots_data_folder:-ots-1713}")"
-  if tar -tzf "${tmp}/ots/ots-data.tar.gz" | grep -Fq "${ots_base}/ca/"; then
+
+  # Do not pipe tar directly into grep while pipefail is active: grep -q exits
+  # after the first match and tar can then receive SIGPIPE, producing a false
+  # negative even though the requested path is present.
+  if grep -Fq "${ots_base}/ca/" "${OTS_LIST}"; then
     pass "OTS CA directory present in backup"
   else
     fail "OTS CA directory missing from backup"
   fi
 
-  if tar -tzf "${tmp}/ots/ots-data.tar.gz" | grep -Fq "${ots_base}/ca/truststore-root.p12"; then
+  if grep -Fq "${ots_base}/ca/truststore-root.p12" "${OTS_LIST}"; then
     pass "OTS root truststore present"
   else
     warn "truststore-root.p12 not found at expected path"
