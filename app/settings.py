@@ -50,6 +50,12 @@ FRONTEND_URL = str(environ.get('FRONTEND_URL', 'http://localhost:5000'))
 # CORS origins for API
 CORS_ORIGINS = str(environ.get('CORS_ORIGINS', '*'))
 
+# Flask/Authlib session cookie hardening. Production deployment explicitly
+# enables Secure so local HTTP development remains possible when desired.
+SESSION_COOKIE_SECURE = _env_bool('SESSION_COOKIE_SECURE', 'False')
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = str(environ.get('SESSION_COOKIE_SAMESITE', 'Lax'))
+
 # OTS usernames that may remain permanently in the reserved airsoft groups.
 # Use comma-separated usernames when more than one permanent account is needed.
 GAME_PERMANENT_USERS_RED = _env_csv('GAME_PERMANENT_USERS_RED')
