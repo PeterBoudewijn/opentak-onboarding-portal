@@ -7,6 +7,8 @@ PORTAL_SERVICE="${PORTAL_SERVICE:-opentak-portal}"
 OTS_SERVICE="${OTS_SERVICE:-opentakserver-1713.service}"
 OTS_PYTHON="${OTS_PYTHON:-/home/team3d/.opentakserver_venv_1713/bin/python}"
 ENV_FILE="${PORTAL_ENV_FILE:-${PORTAL_ROOT}/.env}"
+VERIFY_AFTER_DEPLOY="${VERIFY_AFTER_DEPLOY:-1}"
+AIRSOFT_VERIFIER="${AIRSOFT_VERIFIER:-${PORTAL_ROOT}/scripts/installers/verify_3division_airsoft_stack.sh}"
 
 if [[ "${EUID}" -ne 0 ]]; then
   echo "Run this deployment script with sudo/root." >&2
@@ -73,7 +75,8 @@ if [[ ! -x "${OTS_PYTHON}" ]]; then
   exit 1
 fi
 
-echo "Applying OpenTAKServer CO enrollment patches..."
+echo "Applying OpenTAKServer airsoft patches..."
+"${OTS_PYTHON}" "${PORTAL_ROOT}/scripts/installers/patch_ots_1713_game_mission_isolation.py"
 "${OTS_PYTHON}" "${PORTAL_ROOT}/scripts/installers/patch_ots_1713_certificate_enrollment_security.py"
 "${OTS_PYTHON}" "${PORTAL_ROOT}/scripts/installers/patch_ots_1713_co_hq_profiles.py"
 "${OTS_PYTHON}" "${PORTAL_ROOT}/scripts/installers/patch_ots_1713_co_device_handover.py"
@@ -107,3 +110,18 @@ echo "Fresh authenticated ATAK/iTAK registration is authoritative for EUD owners
 echo "Users can switch accounts by registering with valid credentials; CO buttons use bounded enrollment tokens."
 echo "CO TAK certificate access is enforced per EUD until the daily 23:00 cutoff."
 echo "Authenticated EUD account switches are written to a credential-free JSONL audit log."
+
+if [[ "${VERIFY_AFTER_DEPLOY}" == "1" ]]; then
+  if [[ ! -f "${AIRSOFT_VERIFIER}" ]]; then
+    echo "Airsoft verifier not found: ${AIRSOFT_VERIFIER}" >&2
+    exit 1
+  fi
+
+  echo
+  echo "Running complete post-deploy verifier..."
+  bash "${AIRSOFT_VERIFIER}"
+  echo "Post-deploy verifier passed."
+else
+  echo
+  echo "Post-deploy verifier skipped because VERIFY_AFTER_DEPLOY=${VERIFY_AFTER_DEPLOY}."
+fi
