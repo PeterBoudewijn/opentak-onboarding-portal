@@ -309,14 +309,30 @@ def _find_ots_username_casefold(username):
     """Return the stored OTS username while tolerating historical case spelling."""
     if not username:
         return None
-    response = otsClient.get_users(username=username, page_size=100)
+
     wanted = str(username).casefold()
-    for item in _response_results(response):
-        if not isinstance(item, dict):
-            continue
-        stored = str(item.get("username") or "").strip()
-        if stored and stored.casefold() == wanted:
-            return stored
+
+    # First try the exact OTS query. OTS 1.7.13 compares username filters
+    # case-sensitively, so a historical COBLauw account will not match COBlauw.
+    responses = []
+    try:
+        responses.append(otsClient.get_users(username=username, page_size=100))
+    except Exception:
+        pass
+
+    # Fall back to a broad list and compare locally, case-insensitively.
+    try:
+        responses.append(otsClient.get_users(page=1, page_size=500))
+    except Exception:
+        pass
+
+    for response in responses:
+        for item in _response_results(response):
+            if not isinstance(item, dict):
+                continue
+            stored = str(item.get("username") or "").strip()
+            if stored and stored.casefold() == wanted:
+                return stored
     return None
 
 
