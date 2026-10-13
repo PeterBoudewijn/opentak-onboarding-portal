@@ -600,7 +600,7 @@ def game_qr_login():
         }), 200
     except Exception as exc:
         current_app.logger.exception("CO QR login failed for team %s", team_key)
-        return jsonify({"error": f"CO QR login failed: {exc}"}), 500
+        return jsonify({"error": "CO QR login failed"}), 500
 
 
 def _co_qr_admin_payload():
@@ -649,7 +649,7 @@ def game_admin_reset_co_qr(team_key):
         return jsonify(payload), 207 if cleanup["failures"] else 200
     except Exception as exc:
         current_app.logger.exception("Failed to rotate CO QR for team %s", team_key)
-        return jsonify({"error": f"CO QR reset failed: {exc}"}), 500
+        return jsonify({"error": "CO QR reset failed"}), 500
 
 
 @api_v1.route("/game/admin/co-qr/reset-all", methods=["POST"])
@@ -677,7 +677,7 @@ def game_admin_reset_all_co_qr():
         return jsonify(payload), 207 if failures else 200
     except Exception as exc:
         current_app.logger.exception("Failed to rotate all CO QR codes")
-        return jsonify({"error": f"CO QR reset failed: {exc}"}), 500
+        return jsonify({"error": "CO QR reset failed"}), 500
 
 
 def _ensure_group_exists(group_name):
@@ -1678,7 +1678,7 @@ def generate_co_tak_access(team_key):
         }), 200
     except Exception as exc:
         current_app.logger.exception("Failed to generate CO TAK access for %s", team_key)
-        return jsonify({"error": f"CO TAK login failed: {exc}"}), 500
+        return jsonify({"error": "CO TAK login failed"}), 500
 
 
 @api_v1.route("/game/<team_key>/access", methods=["POST"])
@@ -1798,7 +1798,7 @@ def generate_game_access(team_key):
                     direction,
                 )
 
-        return jsonify({"error": f"Failed to generate game access: {exc}"}), 500
+        return jsonify({"error": "Failed to generate game access"}), 500
 
 
 def _cleanup_tracked_team_sessions(team_key, reason):
