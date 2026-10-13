@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, request
 from flask_cors import CORS
 from flask import jsonify
 from app.models import db, migrate
@@ -35,14 +35,48 @@ def create_app():
 
     @app.after_request
     def add_security_headers(response):
-        """Baseline browser hardening for the public portal."""
+        """Browser hardening for the public portal and authenticated API."""
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "no-referrer")
+        response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
+        response.headers.setdefault("Cross-Origin-Resource-Policy", "same-origin")
         response.headers.setdefault(
             "Permissions-Policy",
             "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
         )
+
+        # Swagger UI injects its own bootstrap script. Keep the stricter portal
+        # CSP away from that legacy admin documentation surface so normal portal
+        # hardening cannot unexpectedly break it.
+        if not request.path.startswith("/api/docs"):
+            response.headers.setdefault(
+                "Content-Security-Policy",
+                "default-src 'self'; "
+                "base-uri 'self'; "
+                "object-src 'none'; "
+                "frame-ancestors 'none'; "
+                "form-action 'self'; "
+                "script-src 'self'; "
+                "style-src 'self' 'unsafe-inline'; "
+                "img-src 'self' data: blob:; "
+                "font-src 'self' data:; "
+                "connect-src 'self' https: wss:; "
+                "worker-src 'self' blob:; "
+                "manifest-src 'self'",
+            )
+
+        # Authenticated/API responses may contain JWTs, QR enrollment material,
+        # or account data and should never be stored by intermediary/browser caches.
+        if request.path.startswith("/api/v1/"):
+            response.headers.setdefault("Cache-Control", "no-store")
+
+        forwarded_proto = request.headers.get("X-Forwarded-Proto", "")
+        if request.is_secure or forwarded_proto.split(",", 1)[0].strip().lower() == "https":
+            response.headers.setdefault(
+                "Strict-Transport-Security",
+                "max-age=31536000",
+            )
         return response
 
     # JWT error handlers
@@ -68,7 +102,7 @@ def create_app():
         app.logger.error(f"Unauthorized: {error}")
         return jsonify({
             'error': 'Authorization required. Please log in.',
-            'message': str(error),
+            'message': 'Authentication required',
             'code': 'AUTH_REQUIRED'
         }), 401
 
@@ -182,7 +216,7 @@ def not_authorised(e):
 @app.errorhandler(422)
 def unprocessable_entity(e):
     app.logger.error(f"422 Error: {str(e)}")
-    return jsonify(error=str(e)), 422
+    return jsonify(error="Request could not be processed"), 422
 
 @app.errorhandler(500)
 def internal_server_error(e):
