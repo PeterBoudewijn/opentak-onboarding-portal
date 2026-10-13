@@ -73,3 +73,37 @@ def test_reset_team_mission_deletes_old_before_creating_new(monkeypatch):
     assert result["newGuid"] == "new-guid"
     assert result["deleted"] is True
     assert result["created"] is True
+
+
+
+def test_co_display_usernames_are_stable():
+    assert GAME_TEAMS["red"]["co_display_username"] == "CORood"
+    assert GAME_TEAMS["blue"]["co_display_username"] == "COBlauw"
+
+
+def test_sync_co_hq_profiles_sets_team_role_and_callsign(monkeypatch):
+    calls = []
+
+    monkeypatch.setattr(
+        game.otsClient,
+        "create_device_profile",
+        lambda **kwargs: calls.append(kwargs) or {"status_code": 200},
+    )
+
+    result = game._sync_co_hq_profiles(
+        "blue",
+        username="COBLauw",
+        euds=[{"uid": "device-1"}],
+    )
+
+    assert result == {"synced": 1, "errors": []}
+    assert [
+        (call["preference_key"], call["preference_value"])
+        for call in calls
+    ] == [
+        ("locationTeam", "Blue"),
+        ("atakRoleType", "HQ"),
+        ("locationCallsign", "COBlauw"),
+    ]
+    assert all(call["eud_uid"] == "device-1" for call in calls)
+    assert all(call["connection"] is True for call in calls)
