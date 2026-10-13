@@ -130,4 +130,18 @@ def test_itak_quick_connect_uses_public_host_and_stream_port(app):
         app.config["GAME_TAK_STREAM_PORT"] = 8089
         value = game._itak_quick_connect()
 
-    assert value == "OpenTAKServer_atak.3division.eu,atak.3division.eu,8089,SSL"
+    assert value == "OpenTAKServer_atak.3division.eu,atak.3division.eu,8089,ssl"
+
+
+
+def test_blue_co_uses_historical_ots_identity_when_exact_display_name_is_absent(monkeypatch):
+    monkeypatch.setattr(game, "_find_ots_username_exact", lambda username: None)
+    monkeypatch.setattr(
+        game,
+        "_find_ots_username_casefold",
+        lambda username: "COBLauw" if str(username).casefold() == "coblauw" else None,
+    )
+    monkeypatch.setattr(game, "_ensure_team_isolation", lambda team, username: None)
+    monkeypatch.setattr(game.otsClient, "activate_user", lambda username: {"status_code": 200})
+
+    assert game._ensure_co_ots_user("blue") == "COBLauw"
