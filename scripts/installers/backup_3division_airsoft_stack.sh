@@ -55,8 +55,10 @@ stamp="$(date +%Y%m%d-%H%M%S)"
 name="3division-airsoft-${stamp}"
 stage="$(mktemp -d "${BACKUP_ROOT}/.${name}.XXXXXX")"
 archive="${BACKUP_ROOT}/${name}.tar.gz"
+bundle_tmp=""
 
 cleanup() {
+  [[ -z "${bundle_tmp}" ]] || rm -f "${bundle_tmp}"
   rm -rf "${stage}"
 }
 trap cleanup EXIT
@@ -69,7 +71,15 @@ portal_commit="$(sudo -u "${PORTAL_USER}" git -C "${PORTAL_ROOT}" rev-parse HEAD
 portal_branch="$(sudo -u "${PORTAL_USER}" git -C "${PORTAL_ROOT}" branch --show-current || true)"
 
 # Self-contained Git backup of the portal source and all refs.
-sudo -u "${PORTAL_USER}" git -C "${PORTAL_ROOT}" bundle create "${stage}/portal/portal.bundle" --all
+# The staging directory is intentionally root-only, so create the bundle in a
+# portal-user-writable temporary file and move it into the protected staging set.
+bundle_tmp="$(mktemp /tmp/3division-portal-bundle.XXXXXX)"
+chown "${PORTAL_USER}":"${PORTAL_USER}" "${bundle_tmp}"
+sudo -u "${PORTAL_USER}" git -C "${PORTAL_ROOT}" bundle create "${bundle_tmp}" --all
+mv "${bundle_tmp}" "${stage}/portal/portal.bundle"
+bundle_tmp=""
+chmod 600 "${stage}/portal/portal.bundle"
+
 cp -a "${PORTAL_ROOT}/.env" "${stage}/portal/.env"
 chmod 600 "${stage}/portal/.env"
 
