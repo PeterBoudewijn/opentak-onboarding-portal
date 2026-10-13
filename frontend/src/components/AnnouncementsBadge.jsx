@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { announcementsAPI } from '../services/api';
+import SafeHtml from './SafeHtml';
 import './AnnouncementsBadge.css';
 
 function AnnouncementsBadge() {
@@ -135,7 +136,7 @@ function AnnouncementsBadge() {
               <button onClick={() => setSelectedAnnouncement(null)}>x</button>
             </div>
             <div className="modal-body">
-              <div dangerouslySetInnerHTML={{ __html: selectedAnnouncement.content }} />
+              <SafeHtml html={selectedAnnouncement.content} />
             </div>
             <div className="modal-footer">
               <span className="date">{t('announcements.posted')}: {new Date(selectedAnnouncement.sentAt).toLocaleString()}</span>
