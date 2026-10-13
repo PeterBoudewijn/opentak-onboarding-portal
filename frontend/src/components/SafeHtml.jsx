@@ -82,7 +82,7 @@ function renderNode(node, key) {
   return React.createElement(tag, props, children);
 }
 
-export default function SafeHtml({ html, className }) {
+export default function SafeHtml({ html, className, ...rest }) {
   const content = useMemo(() => {
     const parser = new DOMParser();
     const document = parser.parseFromString(String(html || ''), 'text/html');
@@ -91,5 +91,5 @@ export default function SafeHtml({ html, className }) {
       .filter((node) => node !== null && node !== undefined);
   }, [html]);
 
-  return <div className={className}>{content}</div>;
+  return <div className={className} {...rest}>{content}</div>;
 }
