@@ -283,7 +283,8 @@ class OTSClient:
         if page is not None:
             params["page"] = page
         if page_size is not None:
-            params["page_size"] = page_size
+            # OTS paginate() uses the query parameter name "per_page".
+            params["per_page"] = page_size
         if username is not None:
             params["username"] = username
         
