@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { authStorage } from '../services/authStorage';
 import './EditProfile.css';
 
 const API_BASE_URL = window.location.origin;
@@ -24,7 +25,7 @@ export default function EditProfile() {
   const { data: user, isLoading } = useQuery({
     queryKey: ['currentUser'],
     queryFn: async () => {
-      const token = localStorage.getItem('access_token');
+      const token = authStorage.getAccessToken();
       const response = await fetch(`${API_BASE_URL}/api/v1/auth/me`, {
         headers: {
           'Authorization': `Bearer ${token}`
@@ -50,7 +51,7 @@ export default function EditProfile() {
   // Update user mutation
   const updateMutation = useMutation({
     mutationFn: async (data) => {
-      const token = localStorage.getItem('access_token');
+      const token = authStorage.getAccessToken();
       const response = await fetch(`${API_BASE_URL}/api/v1/users/${user.id}`, {
         method: 'PUT',
         headers: {

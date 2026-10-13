@@ -2,10 +2,8 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { authStorage } from '../services/authStorage';
 import './ChangePassword.css';
-
-// Import the centralized API helper
-import api from '../services/api';
 
 const API_BASE_URL = window.location.origin;
 
@@ -23,7 +21,7 @@ export default function ChangePassword() {
   // Change password mutation
   const changeMutation = useMutation({
     mutationFn: async (data) => {
-      const token = localStorage.getItem('access_token');
+      const token = authStorage.getAccessToken();
       const response = await fetch(`${API_BASE_URL}/api/v1/auth/change-password`, {
         method: 'POST',
         headers: {

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import axios from 'axios';
+import { authStorage } from '../../services/authStorage';
 import { useNotification } from '../../contexts/NotificationContext';
 import { useAuth } from '../../contexts/AuthContext';
 import './PendingRegistrationsList.css';
@@ -42,7 +43,7 @@ function PendingRegistrationsList() {
 
   const fetchSettings = async () => {
     try {
-      const token = localStorage.getItem('access_token');
+      const token = authStorage.getAccessToken();
       const response = await axios.get(`${API_URL}/api/v1/admin/settings`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -59,7 +60,7 @@ function PendingRegistrationsList() {
 
   const fetchPendingRegistrations = async () => {
     try {
-      const token = localStorage.getItem('access_token');
+      const token = authStorage.getAccessToken();
       const response = await axios.get(`${API_URL}/api/v1/pending-registrations`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -73,7 +74,7 @@ function PendingRegistrationsList() {
 
   const fetchOnboardingCodes = async () => {
     try {
-      const token = localStorage.getItem('access_token');
+      const token = authStorage.getAccessToken();
       const response = await axios.get(`${API_URL}/api/v1/onboarding-codes`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -101,7 +102,7 @@ function PendingRegistrationsList() {
     if (!confirmed) return;
 
     try {
-      const token = localStorage.getItem('access_token');
+      const token = authStorage.getAccessToken();
       await axios.delete(`${API_URL}/api/v1/pending-registrations/${id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -120,7 +121,7 @@ function PendingRegistrationsList() {
     if (!confirmed) return;
 
     try {
-      const token = localStorage.getItem('access_token');
+      const token = authStorage.getAccessToken();
       const response = await axios.post(`${API_URL}/api/v1/pending-registrations/${id}/resend`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -139,7 +140,7 @@ function PendingRegistrationsList() {
     if (!confirmed) return;
 
     try {
-      const token = localStorage.getItem('access_token');
+      const token = authStorage.getAccessToken();
       const response = await axios.post(`${API_URL}/api/v1/pending-registrations/cleanup-expired`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -158,7 +159,7 @@ function PendingRegistrationsList() {
     if (!confirmed) return;
 
     try {
-      const token = localStorage.getItem('access_token');
+      const token = authStorage.getAccessToken();
       const response = await axios.post(`${API_URL}/api/v1/pending-registrations/${id}/approve`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -268,7 +269,7 @@ function PendingRegistrationsList() {
     setFormLoading(true);
 
     try {
-      const token = localStorage.getItem('access_token');
+      const token = authStorage.getAccessToken();
 
       // Convert username to lowercase
       const submitData = {
