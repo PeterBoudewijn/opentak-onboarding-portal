@@ -75,6 +75,7 @@ echo "Applying OpenTAKServer CO enrollment patches..."
 "${OTS_PYTHON}" "${PORTAL_ROOT}/scripts/installers/patch_ots_1713_co_device_restore_history.py"
 "${OTS_PYTHON}" "${PORTAL_ROOT}/scripts/installers/patch_ots_1713_authenticated_eud_switching.py"
 "${OTS_PYTHON}" "${PORTAL_ROOT}/scripts/installers/patch_ots_1713_co_daily_access.py"
+"${OTS_PYTHON}" "${PORTAL_ROOT}/scripts/installers/patch_ots_1713_eud_audit_log.py"
 
 echo "Building frontend..."
 cd "${PORTAL_ROOT}/frontend"
@@ -99,3 +100,4 @@ echo "CO login QR codes are created and reset by an administrator in the portal.
 echo "Fresh authenticated ATAK/iTAK registration is authoritative for EUD ownership."
 echo "Users can switch accounts by registering with valid credentials; CO buttons use bounded enrollment tokens."
 echo "CO TAK certificate access is enforced per EUD until the daily 23:00 cutoff."
+echo "Authenticated EUD account switches are written to a credential-free JSONL audit log."
