@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { announcementsAPI } from '../services/api';
+import SafeHtml from '../components/SafeHtml';
 import './AnnouncementHistory.css';
 
 function AnnouncementHistory() {
@@ -89,7 +90,7 @@ function AnnouncementHistory() {
               </button>
             </div>
             <div className="modal-body">
-              <div dangerouslySetInnerHTML={{ __html: selectedAnnouncement.content }} />
+              <SafeHtml html={selectedAnnouncement.content} />
             </div>
             <div className="modal-footer">
               <span className="date">{t('announcements.posted')}: {formatDate(selectedAnnouncement.sentAt)}</span>
