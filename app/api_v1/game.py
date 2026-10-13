@@ -9,8 +9,8 @@ Security model:
 - Each session user belongs exclusively to its own team group (IN + OUT).
 - Red/blue game leaders only see their own team.
 - Only the portal administrator can close all tracked sessions.
-- ATAK enrollment tokens expire at the next 23:00 Europe/Amsterdam,
-  capped at 24 real hours.
+- ATAK/iTAK enrollment tokens and active CO certificate access expire at the
+  next 23:00 Europe/Amsterdam, capped at 24 real hours.
 - Closed temporary OTS users are deleted after their EUDs have disconnected.
 - GameRed and GameBlue each have a group-isolated mission that is replaced daily at 23:00.
 """
@@ -438,6 +438,40 @@ def _ensure_co_ots_user(team_key):
     _ensure_team_isolation(team_key, username)
     otsClient.activate_user(username)
     return username
+
+
+def _revoke_co_tak_access(team_key, reason):
+    """End current CO TAK access without deleting the permanent CO identity."""
+    username = _co_ots_username(team_key)
+    euds = _get_user_euds(username)
+
+    try:
+        otsClient.delete_atak_qr_string(username)
+    except Exception:
+        # Missing/expired token is already the desired state.
+        pass
+
+    # Certificate files remain long-lived in OTS, so account deactivation is
+    # defense in depth. The OTS daily certificate-window guard independently
+    # expires every enrolled CO device at the same cutoff.
+    otsClient.deactivate_user(username)
+
+    current_app.logger.warning(
+        "Revoked CO TAK access for %s as %s (%s, %s EUDs)",
+        team_key,
+        username,
+        reason,
+        len(euds),
+    )
+    return {
+        "team": team_key,
+        "username": username,
+        "eudCount": len(euds),
+        "euds": euds,
+        "enrollmentTokenRevoked": True,
+        "accountDeactivated": True,
+        "reason": reason,
+    }
 
 
 def _ensure_co_qr_user(team_key):
@@ -1764,7 +1798,7 @@ def airsoft_game_user_delete_retry():
     max_instances=1,
 )
 def airsoft_game_credential_cutoff():
-    """Deactivate team sessions and replace both team missions at 23:00."""
+    """End all game/CO access and replace both team missions at 23:00."""
     with scheduler.app.app_context():
         for team_key in GAME_TEAMS:
             try:
@@ -1779,6 +1813,19 @@ def airsoft_game_credential_cutoff():
             except Exception:
                 current_app.logger.exception(
                     "23:00 airsoft cutoff failed for %s", team_key
+                )
+
+            try:
+                co_result = _revoke_co_tak_access(team_key, "23:00_cutoff")
+                current_app.logger.info(
+                    "23:00 CO TAK cutoff completed for %s (%s, %s EUDs)",
+                    team_key,
+                    co_result["username"],
+                    co_result["eudCount"],
+                )
+            except Exception:
+                current_app.logger.exception(
+                    "23:00 CO TAK cutoff failed for %s", team_key
                 )
 
         for team_key in GAME_TEAMS:
