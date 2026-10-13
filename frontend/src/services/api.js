@@ -536,6 +536,10 @@ export const gameAPI = {
     axios.post(`${API_BASE_URL}/api/v1/game/qr-login`, { team, token }),
   getCoQr: () =>
     api.get('/game/admin/co-qr'),
+  getCoDevices: () =>
+    api.get('/game/admin/co-devices'),
+  revokeCoDevice: (team, uid) =>
+    api.post(`/game/admin/co-devices/${team}/${encodeURIComponent(uid)}/revoke`),
   resetCoQr: (team) =>
     api.post(`/game/admin/co-qr/${team}/reset`),
   resetAllCoQr: () =>
