@@ -443,8 +443,9 @@ function Game({ forcedTeam = null }) {
                     <div className="game-itak-login">
                       <h4>iTAK koppelen als {team.coTakLogin.username}</h4>
                       <p>
-                        iTAK gebruikt geen ATAK Android-deeplink. Scan deze Quick Connect QR
-                        vanuit iTAK vanaf een tweede scherm, of voeg dezelfde server handmatig toe.
+                        Op iPhone/iPad werkt de ATAK Android-deeplink niet. Staat deze pagina op
+                        hetzelfde toestel, voeg de server hieronder handmatig toe in iTAK. Staat
+                        de QR op een tweede scherm, kies in iTAK voor <strong>Scan QR</strong>.
                       </p>
 
                       <div className="game-itak-qr">
@@ -473,10 +474,11 @@ function Game({ forcedTeam = null }) {
                       </dl>
 
                       <p>
-                        Schakel in iTAK <strong>authenticatie</strong> en
-                        <strong> client certificate enrollment</strong> in. Gebruik onderstaande
-                        tijdelijke enrollmentcode als wachtwoord. De permanente CO-wachtwoorden
-                        worden niet gedeeld.
+                        In iTAK: <strong>Settings → Network → Servers → +</strong>. Gebruik
+                        bovenstaande server, poort en SSL. Schakel <strong>Authentication</strong>
+                        en <strong>Enroll for Client Certificate</strong> in. Gebruik de
+                        gebruikersnaam hierboven en onderstaande tijdelijke enrollmentcode als
+                        wachtwoord. De permanente CO-wachtwoorden worden niet gedeeld.
                       </p>
 
                       <code className="game-itak-token">
@@ -484,6 +486,18 @@ function Game({ forcedTeam = null }) {
                       </code>
 
                       <div className="game-itak-actions">
+                        <button
+                          type="button"
+                          onClick={() => copyText(coTakAccess[team.team].itak.host)}
+                        >
+                          Kopieer server
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => copyText(coTakAccess[team.team].itak.username)}
+                        >
+                          Kopieer gebruikersnaam
+                        </button>
                         <button
                           type="button"
                           onClick={() => copyText(coTakAccess[team.team].itak.enrollmentCode)}
