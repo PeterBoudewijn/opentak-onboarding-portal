@@ -246,6 +246,7 @@ else
   ENROLL_PY="${OTS_PACKAGE}/blueprints/marti_api/certificate_enrollment_api.py"
   EUD_PY="${OTS_PACKAGE}/eud_handler/EudHandler.py"
   EUD_MODEL_PY="${OTS_PACKAGE}/models/EUD.py"
+  MISSION_INVITATION_PY="${OTS_PACKAGE}/models/MissionInvitation.py"
   MISSION_PY="${OTS_PACKAGE}/blueprints/marti_api/mission_marti_api.py"
   DATA_PACKAGE_PY="${OTS_PACKAGE}/blueprints/marti_api/data_package_marti_api.py"
 
@@ -263,11 +264,12 @@ else
   check_marker "${EUD_PY}" "AIRSOFT_CO_DAILY_STREAM_GUARD_V1" "daily CO stream guard"
   check_marker "${EUD_PY}" "AIRSOFT_MULTI_DEVICE_CALLSIGN_ROUTING_V1" "multi-device callsign routing"
   check_marker "${EUD_MODEL_PY}" "AIRSOFT_MULTI_DEVICE_CALLSIGN_MODEL_V1" "multi-device callsign model"
+  check_marker "${MISSION_INVITATION_PY}" "AIRSOFT_MULTI_DEVICE_CALLSIGN_INVITATION_V1" "multi-device mission invitation model"
   check_marker "${MISSION_PY}" "AIRSOFT_GAME_MISSION_ISOLATION_V1" "mission isolation patch"
   check_marker "${MISSION_PY}" "AIRSOFT_GAME_CONTENT_ISOLATION_V1" "mission content metadata isolation patch"
   check_marker "${DATA_PACKAGE_PY}" "AIRSOFT_GAME_CONTENT_ISOLATION_V1" "hash-addressed mission content download isolation patch"
 
-  if sudo -u "${OTS_RUN_USER}" env HOME="${OTS_HOME}" OTS_DATA_FOLDER="${OTS_DATA_FOLDER}" "${OTS_PYTHON}" -m py_compile "${TOKEN_PY}" "${ENROLL_PY}" "${EUD_PY}" "${EUD_MODEL_PY}" "${MISSION_PY}" "${DATA_PACKAGE_PY}"; then
+  if sudo -u "${OTS_RUN_USER}" env HOME="${OTS_HOME}" OTS_DATA_FOLDER="${OTS_DATA_FOLDER}" "${OTS_PYTHON}" -m py_compile "${TOKEN_PY}" "${ENROLL_PY}" "${EUD_PY}" "${EUD_MODEL_PY}" "${MISSION_INVITATION_PY}" "${MISSION_PY}" "${DATA_PACKAGE_PY}"; then
     pass "OpenTAKServer patched modules compile"
   else
     fail "OpenTAKServer patched modules compile"
