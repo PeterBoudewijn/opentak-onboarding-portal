@@ -175,7 +175,7 @@ class OTSClient:
         if page is not None:
             params["page"] = page
         if page_size is not None:
-            params["page_size"] = page_size
+            params["per_page"] = page_size
         if hash is not None:
             params["hash"] = hash
         if filename is not None:
