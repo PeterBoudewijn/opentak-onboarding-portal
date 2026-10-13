@@ -526,6 +526,8 @@ export const gameAPI = {
   getStatus: () => api.get('/game/status'),
   generateAccess: (team, maxUses = 250) =>
     api.post(`/game/${team}/access`, { maxUses }),
+  generateCoTakAccess: (team) =>
+    api.post(`/game/${team}/co-tak-access`),
   cleanupTeam: (team) =>
     api.post(`/game/admin/cleanup/${team}`),
   cleanupAll: () =>
