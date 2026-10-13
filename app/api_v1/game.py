@@ -42,6 +42,7 @@ GAME_TEAMS = {
         "leader_role": "game_red_leader",
         "mission": "GameRed",
         "mission_description": "Dagelijkse airsoftmissie voor Team Rood",
+        "co_display_username": "CORood",
     },
     "blue": {
         "label": "GameBlue",
@@ -50,6 +51,7 @@ GAME_TEAMS = {
         "leader_role": "game_blue_leader",
         "mission": "GameBlue",
         "mission_description": "Dagelijkse airsoftmissie voor Team Blauw",
+        "co_display_username": "COBlauw",
     },
 }
 _STATE_LOCK = threading.Lock()
@@ -299,6 +301,36 @@ def _co_portal_username(team_key):
     return str(current_app.config.get(config_key, "") or "").strip()
 
 
+def _co_display_username(team_key):
+    return GAME_TEAMS[team_key]["co_display_username"]
+
+
+def _find_ots_username_casefold(username):
+    """Return the stored OTS username while tolerating historical case spelling."""
+    if not username:
+        return None
+    response = otsClient.get_users(username=username, page_size=100)
+    wanted = str(username).casefold()
+    for item in _response_results(response):
+        if not isinstance(item, dict):
+            continue
+        stored = str(item.get("username") or "").strip()
+        if stored and stored.casefold() == wanted:
+            return stored
+    return None
+
+
+def _co_ots_username(team_key):
+    """Resolve the actual OTS account behind the friendly CO display identity."""
+    requested = _co_portal_username(team_key) or _co_display_username(team_key)
+    stored = _find_ots_username_casefold(requested)
+    if not stored:
+        raise RuntimeError(
+            f"OTS CO account {requested} does not exist for team {team_key}"
+        )
+    return stored
+
+
 def _ensure_co_qr_user(team_key):
     """Use the permanent CO identity for an admin-managed QR login."""
     from app.models import db, UserModel, UserRoleModel
@@ -308,7 +340,7 @@ def _ensure_co_qr_user(team_key):
     if not username:
         raise RuntimeError(f"CO portal username is not configured for team {team_key}")
 
-    callsign = "CO Rood" if team_key == "red" else "CO Blauw"
+    callsign = _co_display_username(team_key)
     email = f"{username.lower()}@game.invalid"
 
     role = UserRoleModel.get_role_by_name(team["leader_role"])
@@ -322,8 +354,8 @@ def _ensure_co_qr_user(team_key):
         raise RuntimeError(f"Could not create game role {team['leader_role']}")
 
     # Portal users are normalized to lowercase by UserModel.create_user().
-    # Find an existing CO identity case-insensitively so CORood/COBLauw map to
-    # the same local account used by a normal portal login.
+    # Find an existing CO identity case-insensitively so historical spelling
+    # differences (for example COBLauw versus COBlauw) keep the same account.
     user = UserModel.query.filter(
         db.func.lower(UserModel.username) == username.lower()
     ).first()
@@ -376,7 +408,7 @@ def game_qr_login():
         effective_roles = [team["leader_role"]]
         qr_version = _co_qr_version(team_key)
         claims = {
-            "username": _co_portal_username(team_key),
+            "username": _co_display_username(team_key),
             "roles": effective_roles,
             "game_qr_team": team_key,
             "game_qr_version": qr_version,
@@ -398,7 +430,7 @@ def game_qr_login():
         current_app.logger.info(
             "CO QR login accepted for team %s as %s",
             team_key,
-            _co_portal_username(team_key),
+            _co_display_username(team_key),
         )
         return jsonify({
             "access_token": access_token,
@@ -407,7 +439,7 @@ def game_qr_login():
             "expiresAt": cutoff.isoformat(),
             "user": {
                 "id": user.id,
-                "username": _co_portal_username(team_key),
+                "username": _co_display_username(team_key),
                 "email": user.email,
                 "callsign": user.callsign,
                 "roles": [
@@ -751,6 +783,40 @@ def _get_user_euds(username):
         return []
     response = otsClient.get_euds(page=1, page_size=500, username=username)
     return _response_results(response)
+
+
+def _sync_co_hq_profiles(team_key, username=None, euds=None):
+    """Force permanent CO EUDs to the team colour, CO callsign and HQ role."""
+    team = GAME_TEAMS[team_key]
+    username = username or _co_ots_username(team_key)
+    euds = euds if euds is not None else _get_user_euds(username)
+    synced = 0
+    errors = []
+
+    for eud in euds:
+        uid = eud.get("uid")
+        if not uid:
+            continue
+        try:
+            for preference_key, preference_value in (
+                ("locationTeam", team["team_color"]),
+                ("atakRoleType", "HQ"),
+                ("locationCallsign", _co_display_username(team_key)),
+            ):
+                otsClient.create_device_profile(
+                    preference_key=preference_key,
+                    preference_value=preference_value,
+                    value_class="class java.lang.String",
+                    enrollment=False,
+                    connection=True,
+                    active=True,
+                    eud_uid=uid,
+                )
+            synced += 1
+        except Exception as exc:
+            errors.append({"uid": uid, "error": str(exc)})
+
+    return {"synced": synced, "errors": errors}
 
 
 def _sync_team_color_profiles(team_key, username, euds=None):
@@ -1109,6 +1175,22 @@ def _team_status(team_key):
         if username else {"synced": 0, "errors": []}
     )
 
+    co_username = None
+    co_euds = []
+    co_profile_sync = {"synced": 0, "errors": []}
+    try:
+        co_username = _co_ots_username(team_key)
+        co_euds = _get_user_euds(co_username)
+        co_profile_sync = _sync_co_hq_profiles(team_key, co_username, co_euds)
+    except Exception as exc:
+        co_profile_sync = {"synced": 0, "errors": [{"error": str(exc)}]}
+
+    try:
+        claims = get_jwt()
+    except Exception:
+        claims = {}
+    co_tak_available = claims.get("game_qr_team") == team_key
+
     return {
         "team": team_key,
         "accountLabel": team["label"],
@@ -1119,6 +1201,13 @@ def _team_status(team_key):
         "eudCount": len(euds),
         "euds": euds,
         "profileSync": profile_sync,
+        "coProfileSync": co_profile_sync,
+        "coEudCount": len(co_euds),
+        "coTakLogin": {
+            "available": bool(co_tak_available),
+            "username": _co_display_username(team_key),
+            "role": "HQ",
+        },
         "outsidersRemoved": outsiders_removed,
         "permanentUsers": sorted(_permanent_team_users(team_key)),
         "expiresAt": current.get("expiresAt") if current else None,
@@ -1159,6 +1248,85 @@ def game_status():
             "every game session has a unique OTS username that is never reactivated."
         ),
     }), 200
+
+
+@api_v1.route("/game/<team_key>/co-tak-access", methods=["POST"])
+@jwt_required()
+def generate_co_tak_access(team_key):
+    """Return same-day ATAK enrollment for the permanent CO identity."""
+    error = _require_team_access(team_key)
+    if error:
+        return error
+
+    claims = get_jwt()
+    if claims.get("game_qr_team") != team_key:
+        return jsonify({
+            "error": "CO TAK login is only available from the physical CO QR session"
+        }), 403
+
+    try:
+        username = _co_ots_username(team_key)
+        cutoff = _next_cutoff()
+        expires_at = int(cutoff.timestamp())
+        max_uses = int(current_app.config.get("GAME_CO_TAK_MAX_USES", 250))
+        max_uses = max(1, min(max_uses, 5000))
+
+        # Existing CO devices should immediately receive the requested HQ role.
+        _sync_co_hq_profiles(team_key, username)
+
+        payload = {}
+        try:
+            existing = otsClient.get_atak_qr_string(username)
+            payload = _response_payload(existing)
+        except Exception:
+            payload = {}
+
+        reusable = False
+        qr_string = payload.get("qr_string")
+        try:
+            exp = int(float(payload.get("exp") or 0))
+            total_uses = int(payload.get("total_uses") or 0)
+            existing_max = payload.get("max")
+            existing_max = int(existing_max) if existing_max is not None else None
+            reusable = (
+                bool(qr_string)
+                and not bool(payload.get("disabled"))
+                and abs(exp - expires_at) <= 120
+                and exp > int(datetime.now(timezone.utc).timestamp()) + 30
+                and (existing_max is None or total_uses < existing_max)
+            )
+        except (TypeError, ValueError):
+            reusable = False
+
+        if not reusable:
+            created = otsClient.create_atak_qr_string(
+                username=username,
+                exp=expires_at,
+                max_uses=max_uses,
+            )
+            payload = _response_payload(created)
+            qr_string = payload.get("qr_string")
+
+        if not qr_string:
+            raise RuntimeError("OpenTAKServer returned no ATAK enrollment URL")
+
+        current_app.logger.info(
+            "Issued/reused CO ATAK enrollment for %s as %s (role HQ)",
+            team_key,
+            username,
+        )
+        return jsonify({
+            "team": team_key,
+            "username": _co_display_username(team_key),
+            "takUrl": qr_string,
+            "role": "HQ",
+            "teamColor": GAME_TEAMS[team_key]["team_color"],
+            "expiresAt": cutoff.isoformat(),
+            "multipleDevicesAllowed": True,
+        }), 200
+    except Exception as exc:
+        current_app.logger.exception("Failed to generate CO TAK access for %s", team_key)
+        return jsonify({"error": f"CO TAK login failed: {exc}"}), 500
 
 
 @api_v1.route("/game/<team_key>/access", methods=["POST"])
@@ -1368,6 +1536,13 @@ def airsoft_game_membership_guard():
                 current = _current_session(team_key)
                 current_username = current.get("username") if current else None
                 removed = _enforce_reserved_team_group(team_key, current_username)
+                try:
+                    _sync_co_hq_profiles(team_key)
+                except Exception:
+                    current_app.logger.exception(
+                        "CO HQ profile sync failed for %s",
+                        team_key,
+                    )
                 if removed:
                     current_app.logger.warning(
                         "Airsoft membership guard removed unexpected users from %s: %s",
