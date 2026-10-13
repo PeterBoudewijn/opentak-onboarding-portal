@@ -468,7 +468,7 @@ def _co_qr_admin_payload():
             "configured": bool(token),
             "url": _co_qr_public_url(team_key, token),
             "version": _co_qr_version(team_key),
-            "username": _co_portal_username(team_key),
+            "username": _co_display_username(team_key),
         }
     return {"teams": teams}
 
