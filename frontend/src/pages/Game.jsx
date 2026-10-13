@@ -53,6 +53,7 @@ function Game({ forcedTeam = null }) {
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState('');
   const [coQr, setCoQr] = useState(null);
+  const [coDevices, setCoDevices] = useState(null);
   const [coTakAccess, setCoTakAccess] = useState({});
   const [coTakPreparing, setCoTakPreparing] = useState({});
   const [coTakPrepareError, setCoTakPrepareError] = useState({});
@@ -88,6 +89,24 @@ function Game({ forcedTeam = null }) {
     gameAPI.getCoQr()
       .then((response) => setCoQr(response.data?.teams || null))
       .catch(() => setCoQr(null));
+  }, [admin]);
+
+  const loadCoDevices = async () => {
+    if (!admin) return;
+    try {
+      const response = await gameAPI.getCoDevices();
+      setCoDevices(response.data?.teams || null);
+    } catch (err) {
+      setCoDevices(null);
+      setError(err.response?.data?.error || 'CO-apparaten konden niet worden geladen.');
+    }
+  };
+
+  useEffect(() => {
+    if (!admin) return undefined;
+    loadCoDevices();
+    const timer = setInterval(loadCoDevices, 30000);
+    return () => clearInterval(timer);
   }, [admin]);
 
   const teams = useMemo(() => status?.teams || [], [status]);
@@ -242,6 +261,25 @@ function Game({ forcedTeam = null }) {
     }
   };
 
+
+  const revokeCoDevice = async (team, device) => {
+    const label = device.callsign || device.device || device.uid;
+    if (!window.confirm(
+      `CO-toegang voor ${label} intrekken? Het huidige CO-certificaat van dit toestel wordt ongeldig voor game-toegang. Een nieuwe geldige CO-enrollment kan het toestel later opnieuw activeren.`
+    )) return;
+
+    setBusy(`co-device-${device.uid}`);
+    setError('');
+    try {
+      await gameAPI.revokeCoDevice(team, device.uid);
+      await loadCoDevices();
+    } catch (err) {
+      setError(err.response?.data?.error || 'CO-toegang voor dit apparaat intrekken is mislukt.');
+    } finally {
+      setBusy(null);
+    }
+  };
+
   if (loading) return <div className="game-page"><p>Gameportal laden...</p></div>;
 
   return (
@@ -314,6 +352,109 @@ function Game({ forcedTeam = null }) {
             Tijdelijke OTS-users worden verwijderd zodra hun EUD is disconnected. CORood en
             COBlauw blijven onaangetast. Print daarna de nieuwe QR voor de betreffende CO.
           </p>
+        </section>
+      )}
+
+      {admin && coDevices && (
+        <section className="game-card game-co-devices-card">
+          <div className="game-card-title">
+            <div>
+              <span className="game-team-badge">BEHEER</span>
+              <h2>CO-apparaten</h2>
+            </div>
+          </div>
+          <p>
+            Apparaten die op dit moment aan CORood of COBlauw gekoppeld zijn.
+            Connected apparaten staan bovenaan. Intrekken blokkeert alleen het
+            huidige CO-certificaat van dat toestel.
+          </p>
+
+          <div className="game-co-device-teams">
+            {['red', 'blue'].map((teamKey) => {
+              const teamInfo = coDevices?.[teamKey];
+              const devices = teamInfo?.devices || [];
+              return (
+                <div className={`game-co-device-team game-co-device-team-${teamKey}`} key={teamKey}>
+                  <div className="game-co-device-team-title">
+                    <div>
+                      <span className="game-team-badge">CO {TEAM_LABELS[teamKey]?.toUpperCase()}</span>
+                      <h3>{teamInfo?.username || (teamKey === 'red' ? 'CORood' : 'COBlauw')}</h3>
+                    </div>
+                    <div className="game-count">
+                      {teamInfo?.connectedCount || 0} connected / {teamInfo?.deviceCount || 0}
+                    </div>
+                  </div>
+
+                  {devices.length === 0 && (
+                    <p className="game-warning">Nog geen apparaten aan deze CO gekoppeld.</p>
+                  )}
+
+                  <div className="game-co-device-list">
+                    {devices.map((device) => (
+                      <div className="game-co-device" key={device.uid}>
+                        <div className="game-co-device-header">
+                          <strong>{device.callsign || device.device || 'TAK-apparaat'}</strong>
+                          <span className={`game-device-status ${device.connected ? 'connected' : 'disconnected'}`}>
+                            {device.status || 'Unknown'}
+                          </span>
+                        </div>
+
+                        <dl className="game-co-device-meta">
+                          <div>
+                            <dt>UID</dt>
+                            <dd className="game-device-uid">{device.uid}</dd>
+                          </div>
+                          <div>
+                            <dt>Apparaat</dt>
+                            <dd>{[device.device, device.platform].filter(Boolean).join(' · ') || '-'}</dd>
+                          </div>
+                          <div>
+                            <dt>Versie</dt>
+                            <dd>{device.version || device.os || '-'}</dd>
+                          </div>
+                          <div>
+                            <dt>Laatst gezien</dt>
+                            <dd>{device.lastSeen ? new Date(device.lastSeen).toLocaleString('nl-NL') : '-'}</dd>
+                          </div>
+                          <div>
+                            <dt>CO geldig tot</dt>
+                            <dd>
+                              {device.revoked
+                                ? 'Ingetrokken'
+                                : device.expired
+                                  ? 'Verlopen'
+                                  : device.validUntil
+                                    ? new Date(device.validUntil).toLocaleString('nl-NL')
+                                    : 'Nog geen dagvenster'}
+                            </dd>
+                          </div>
+                        </dl>
+
+                        {!device.certificateWindowBound && !device.revoked && (
+                          <p className="game-warning">
+                            Dit is een bestaand/legacy CO-apparaat. Meld het toestel eenmalig
+                            opnieuw aan als CO om de dagelijkse 23:00-geldigheid te activeren.
+                          </p>
+                        )}
+
+                        <button
+                          className="game-danger"
+                          disabled={busy !== null || device.revoked}
+                          onClick={() => revokeCoDevice(teamKey, device)}
+                        >
+                          {busy === `co-device-${device.uid}`
+                            ? 'Intrekken...'
+                            : device.revoked
+                              ? 'CO-toegang ingetrokken'
+                              : 'Trek CO-toegang in'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </section>
       )}
 
