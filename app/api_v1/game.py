@@ -358,7 +358,7 @@ def _atak_enrollment_fields(qr_string):
 def _itak_quick_connect():
     host = _public_tak_host()
     port = int(current_app.config.get("GAME_TAK_STREAM_PORT", 8089))
-    return f"OpenTAKServer_{host},{host},{port},SSL"
+    return f"OpenTAKServer_{host},{host},{port},ssl"
 
 
 def _find_ots_username_exact(username):
@@ -428,25 +428,16 @@ def _co_ots_username(team_key):
 
 
 def _ensure_co_ots_user(team_key):
-    """Ensure new CO enrollments use the exact CORood/COBlauw OTS identity."""
-    desired = _co_display_username(team_key)
-    existing = _find_ots_username_exact(desired)
-    if existing:
-        _ensure_team_isolation(team_key, existing)
-        otsClient.activate_user(existing)
-        return existing
+    """Resolve and activate the permanent OTS CO identity for this team.
 
-    # For blue this creates COBlauw while preserving legacy COBLauw so old
-    # certificates continue to function during the migration.
-    otsClient.create_user(desired, _random_password(), roles=["user"])
-    _ensure_team_isolation(team_key, desired)
-    otsClient.activate_user(desired)
-    current_app.logger.warning(
-        "Created exact permanent CO OTS identity %s for team %s",
-        desired,
-        team_key,
-    )
-    return desired
+    The blue account historically exists in OTS as COBLauw. OTS treats usernames
+    case-insensitively for authentication, so creating a second COBlauw account is
+    both unnecessary and unsafe. The portal/callsign still displays COBlauw.
+    """
+    username = _co_ots_username(team_key)
+    _ensure_team_isolation(team_key, username)
+    otsClient.activate_user(username)
+    return username
 
 
 def _ensure_co_qr_user(team_key):
@@ -1468,7 +1459,7 @@ def generate_co_tak_access(team_key):
                 "quickConnect": _itak_quick_connect(),
                 "host": _public_tak_host(),
                 "port": int(current_app.config.get("GAME_TAK_STREAM_PORT", 8089)),
-                "protocol": "SSL",
+                "protocol": "ssl",
                 "username": username,
                 # OTS enrollment accepts the same bounded token in the Basic
                 # Auth password field, so iTAK never needs the permanent CO password.
