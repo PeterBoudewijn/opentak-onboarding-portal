@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { authAPI, approvalsAPI } from '../services/api';
+import { authStorage } from '../services/authStorage';
 import i18n from '../i18n';
 
 const AuthContext = createContext(null);
@@ -23,15 +24,15 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     // Check if user is already logged in
-    const storedUser = localStorage.getItem('user');
-    const token = localStorage.getItem('access_token');
+    const storedUser = authStorage.getUser();
+    const token = authStorage.getAccessToken();
 
     if (storedUser && token) {
       try {
         setUser(JSON.parse(storedUser));
       } catch (e) {
         // Invalid stored user data, clear it
-        localStorage.removeItem('user');
+        authStorage.clearUser();
         setLoading(false);
         return;
       }
@@ -52,7 +53,7 @@ export const AuthProvider = ({ children }) => {
           clearTimeout(timeoutId);
           const userData = userResponse.data;
           setUser(userData);
-          localStorage.setItem('user', JSON.stringify(userData));
+          authStorage.setUser(userData);
           setPermissions(permissionsResponse.data);
           setApproverStatus({
             isApprover: approverResponse.data.is_approver,
@@ -93,9 +94,9 @@ export const AuthProvider = ({ children }) => {
       const response = await authAPI.login(username.toLowerCase().trim(), password);
       const { access_token, refresh_token, user: userData, needs_profile_completion } = response.data;
 
-      localStorage.setItem('access_token', access_token);
-      localStorage.setItem('refresh_token', refresh_token);
-      localStorage.setItem('user', JSON.stringify(userData));
+      authStorage.setAccessToken(access_token);
+      authStorage.setRefreshToken(refresh_token);
+      authStorage.setUser(userData);
 
       setUser(userData);
       setNeedsProfileCompletion(needs_profile_completion || false);
@@ -136,8 +137,8 @@ export const AuthProvider = ({ children }) => {
    */
   const oidcLogin = async (accessToken, refreshToken) => {
     try {
-      localStorage.setItem('access_token', accessToken);
-      localStorage.setItem('refresh_token', refreshToken);
+      authStorage.setAccessToken(accessToken);
+      authStorage.setRefreshToken(refreshToken);
 
       // Fetch user info using the new token
       const [userResponse, permResponse, approverResponse] = await Promise.all([
@@ -147,7 +148,7 @@ export const AuthProvider = ({ children }) => {
       ]);
 
       const userData = userResponse.data;
-      localStorage.setItem('user', JSON.stringify(userData));
+      authStorage.setUser(userData);
       setUser(userData);
       setPermissions(permResponse.data);
       setApproverStatus({
@@ -175,8 +176,8 @@ export const AuthProvider = ({ children }) => {
       return { success: true };
     } catch (error) {
       // Clean up on failure
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
+      authStorage.setAccessToken(null);
+      authStorage.setRefreshToken(null);
       return {
         success: false,
         error: error.response?.data?.error || 'Failed to complete OIDC login'
@@ -203,9 +204,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-    localStorage.removeItem('user');
+    authStorage.clear();
     sessionStorage.removeItem('admin_session');
     setUser(null);
     setPermissions({ roles: [], modules: [], isAdmin: false });
@@ -222,8 +221,8 @@ export const AuthProvider = ({ children }) => {
     try {
       // Save current admin session
       sessionStorage.setItem('admin_session', JSON.stringify({
-        access_token: localStorage.getItem('access_token'),
-        refresh_token: localStorage.getItem('refresh_token'),
+        access_token: authStorage.getAccessToken(),
+        refresh_token: authStorage.getRefreshToken(),
       }));
 
       const response = await authAPI.impersonate(userId);
@@ -234,8 +233,8 @@ export const AuthProvider = ({ children }) => {
         // Restore admin session on failure
         const saved = JSON.parse(sessionStorage.getItem('admin_session'));
         if (saved) {
-          localStorage.setItem('access_token', saved.access_token);
-          localStorage.setItem('refresh_token', saved.refresh_token);
+          authStorage.setAccessToken(saved.access_token);
+          authStorage.setRefreshToken(saved.refresh_token);
         }
         sessionStorage.removeItem('admin_session');
         return result;
@@ -247,8 +246,8 @@ export const AuthProvider = ({ children }) => {
       const saved = sessionStorage.getItem('admin_session');
       if (saved) {
         const parsed = JSON.parse(saved);
-        localStorage.setItem('access_token', parsed.access_token);
-        localStorage.setItem('refresh_token', parsed.refresh_token);
+        authStorage.setAccessToken(parsed.access_token);
+        authStorage.setRefreshToken(parsed.refresh_token);
       }
       sessionStorage.removeItem('admin_session');
       return {
@@ -288,7 +287,7 @@ export const AuthProvider = ({ children }) => {
       ]);
       const userData = userResponse.data;
       setUser(userData);
-      localStorage.setItem('user', JSON.stringify(userData));
+      authStorage.setUser(userData);
       setPermissions(permResponse.data);
       setApproverStatus({
         isApprover: approverResponse.data.is_approver,
