@@ -115,6 +115,7 @@ echo "Fresh authenticated ATAK/iTAK registration is authoritative for EUD owners
 echo "Users can switch accounts by registering with valid credentials; CO buttons use bounded enrollment tokens."
 echo "CO TAK certificate access is enforced per EUD until the daily 23:00 cutoff."
 echo "Authenticated EUD account switches are written to a credential-free JSONL audit log."
+echo "Multiple physical TAK devices may safely share the same callsign/account."
 
 if [[ "${VERIFY_AFTER_DEPLOY}" == "1" ]]; then
   if [[ ! -f "${AIRSOFT_VERIFIER}" ]]; then
