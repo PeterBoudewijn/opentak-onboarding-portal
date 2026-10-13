@@ -391,12 +391,23 @@ export const packagesAPI = {
   getById: (id) =>
     api.get(`/packages/${id}`),
 
-  download: (id) => {
-    const token = localStorage.getItem('access_token');
-    window.open(
-      `${API_BASE_URL}/api/v1/packages/${id}/download?token=${token}`,
-      '_blank'
-    );
+  download: async (id) => {
+    // Download through the authenticated axios client so the JWT stays in an
+    // Authorization header instead of leaking into URLs, browser history or logs.
+    const response = await api.get(`/packages/${id}/download`, {
+      responseType: 'blob',
+    });
+    const objectUrl = URL.createObjectURL(response.data);
+    const disposition = response.headers['content-disposition'] || '';
+    const match = disposition.match(/filename="?([^";]+)"?/i);
+    const filename = match?.[1] || `package-${id}.zip`;
+    const anchor = document.createElement('a');
+    anchor.href = objectUrl;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(objectUrl);
   },
 
   create: (formData) =>
