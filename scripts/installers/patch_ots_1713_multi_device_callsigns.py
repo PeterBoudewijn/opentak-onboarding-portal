@@ -74,36 +74,49 @@ def patch_handler(source: str) -> str:
     if MARKER_HANDLER in source:
         return source
 
-    declaration_old = """                    self.rabbit_channel.queue_declare(queue=self.callsign)
-                    self.rabbit_channel.queue_declare(queue=self.uid)
-"""
-    declaration_new = f"""                    {MARKER_HANDLER}
-                    # Use only the per-device UID queue. A callsign can be shared by
-                    # multiple physical devices, while a RabbitMQ queue with multiple
-                    # consumers would load-balance instead of fan out.
-                    self.rabbit_channel.queue_declare(queue=self.uid)
-"""
-    if declaration_old not in source:
-        raise RuntimeError("RabbitMQ callsign queue declaration anchor missing")
-    source = source.replace(declaration_old, declaration_new, 1)
+    # The production EudHandler already contains the airsoft team-binding
+    # patch, so do not depend on a large pristine-upstream block. Change only
+    # the three callsign-queue operations we actually need to replace.
+    declare_line = "                    self.rabbit_channel.queue_declare(queue=self.callsign)\n"
+    uid_declare_line = "                    self.rabbit_channel.queue_declare(queue=self.uid)\n"
 
-    bind_old = """                        self.rabbit_channel.queue_bind(
-                            exchange="dms", queue=self.uid, routing_key=self.uid
-                        )
-                        self.rabbit_channel.queue_bind(
+    if declare_line in source:
+        source = source.replace(
+            declare_line,
+            "                    "
+            + MARKER_HANDLER
+            + "\n"
+            + "                    # A callsign may be shared; only declare the per-device UID queue.\n",
+            1,
+        )
+    elif uid_declare_line in source:
+        # Compatibility with an already-customized handler that has removed the
+        # shared declaration by another route but does not yet carry our marker.
+        source = source.replace(
+            uid_declare_line,
+            "                    "
+            + MARKER_HANDLER
+            + "\n"
+            + uid_declare_line,
+            1,
+        )
+    else:
+        raise RuntimeError("RabbitMQ UID queue declaration anchor missing")
+
+    old_callsign_bind = """                        self.rabbit_channel.queue_bind(
                             exchange="dms", queue=self.callsign, routing_key=self.callsign
                         )
+"""
+    new_callsign_bind = """                        self.rabbit_channel.queue_bind(
+                            exchange="dms", queue=self.uid, routing_key=self.callsign
+                        )
+"""
+    if old_callsign_bind in source:
+        source = source.replace(old_callsign_bind, new_callsign_bind, 1)
+    elif new_callsign_bind not in source:
+        raise RuntimeError("RabbitMQ callsign DM binding anchor missing")
 
-                        if {
-                            "exchange": "dms",
-                            "routing_key": self.uid,
-                            "queue": self.uid,
-                        } not in self.bound_queues:
-                            self.bound_queues.append(
-                                {"exchange": "dms", "routing_key": self.uid, "queue": self.uid}
-                            )
-
-                        if {
+    old_bound_queue = """                        if {
                             "exchange": "dms",
                             "routing_key": self.callsign,
                             "queue": self.callsign,
@@ -116,23 +129,7 @@ def patch_handler(source: str) -> str:
                                 }
                             )
 """
-    bind_new = """                        self.rabbit_channel.queue_bind(
-                            exchange="dms", queue=self.uid, routing_key=self.uid
-                        )
-                        self.rabbit_channel.queue_bind(
-                            exchange="dms", queue=self.uid, routing_key=self.callsign
-                        )
-
-                        if {
-                            "exchange": "dms",
-                            "routing_key": self.uid,
-                            "queue": self.uid,
-                        } not in self.bound_queues:
-                            self.bound_queues.append(
-                                {"exchange": "dms", "routing_key": self.uid, "queue": self.uid}
-                            )
-
-                        if {
+    new_bound_queue = """                        if {
                             "exchange": "dms",
                             "routing_key": self.callsign,
                             "queue": self.uid,
@@ -145,24 +142,24 @@ def patch_handler(source: str) -> str:
                                 }
                             )
 """
-    if bind_old not in source:
-        raise RuntimeError("RabbitMQ callsign DM binding anchor missing")
-    source = source.replace(bind_old, bind_new, 1)
+    if old_bound_queue in source:
+        source = source.replace(old_bound_queue, new_bound_queue, 1)
+    elif new_bound_queue not in source:
+        raise RuntimeError("RabbitMQ callsign bound-queue bookkeeping anchor missing")
 
-    consume_old = """                        self.rabbit_channel.basic_consume(
+    old_callsign_consumer = """                        self.rabbit_channel.basic_consume(
                             queue=self.callsign, on_message_callback=self.on_message, auto_ack=True
                         )
-                        self.rabbit_channel.basic_consume(
-                            queue=self.uid, on_message_callback=self.on_message, auto_ack=True
-                        )
 """
-    consume_new = """                        self.rabbit_channel.basic_consume(
-                            queue=self.uid, on_message_callback=self.on_message, auto_ack=True
-                        )
-"""
-    if consume_old not in source:
-        raise RuntimeError("RabbitMQ callsign consumer anchor missing")
-    source = source.replace(consume_old, consume_new, 1)
+    if old_callsign_consumer in source:
+        source = source.replace(old_callsign_consumer, "", 1)
+
+    if (
+        "queue_declare(queue=self.callsign)" in source
+        or 'exchange="dms", queue=self.callsign, routing_key=self.callsign' in source
+        or "queue=self.callsign, on_message_callback=self.on_message" in source
+    ):
+        raise RuntimeError("Shared callsign RabbitMQ queue operations remain after patch")
 
     return source
 
