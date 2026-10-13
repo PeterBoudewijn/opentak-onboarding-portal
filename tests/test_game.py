@@ -145,3 +145,38 @@ def test_blue_co_uses_historical_ots_identity_when_exact_display_name_is_absent(
     monkeypatch.setattr(game.otsClient, "activate_user", lambda username: {"status_code": 200})
 
     assert game._ensure_co_ots_user("blue") == "COBLauw"
+
+
+
+def test_revoke_co_tak_access_deletes_token_and_deactivates_account(app, monkeypatch):
+    calls = []
+
+    monkeypatch.setattr(game, "_co_ots_username", lambda team_key: "CORood")
+    monkeypatch.setattr(
+        game,
+        "_get_user_euds",
+        lambda username: [{"uid": "device-1"}, {"uid": "device-2"}],
+    )
+    monkeypatch.setattr(
+        game.otsClient,
+        "delete_atak_qr_string",
+        lambda username: calls.append(("delete_token", username)),
+    )
+    monkeypatch.setattr(
+        game.otsClient,
+        "deactivate_user",
+        lambda username: calls.append(("deactivate", username)),
+    )
+
+    with app.app_context():
+        result = game._revoke_co_tak_access("red", "23:00_cutoff")
+
+    assert calls == [
+        ("delete_token", "CORood"),
+        ("deactivate", "CORood"),
+    ]
+    assert result["username"] == "CORood"
+    assert result["eudCount"] == 2
+    assert result["enrollmentTokenRevoked"] is True
+    assert result["accountDeactivated"] is True
+    assert result["reason"] == "23:00_cutoff"
