@@ -246,6 +246,7 @@ else
   ENROLL_PY="${OTS_PACKAGE}/blueprints/marti_api/certificate_enrollment_api.py"
   EUD_PY="${OTS_PACKAGE}/eud_handler/EudHandler.py"
   MISSION_PY="${OTS_PACKAGE}/blueprints/marti_api/mission_marti_api.py"
+  DATA_PACKAGE_PY="${OTS_PACKAGE}/blueprints/marti_api/data_package_marti_api.py"
 
   check_marker "${TOKEN_PY}" "AIRSOFT_ENROLLMENT_TOKEN_SUBJECT_BINDING_V1" "enrollment token subject binding"
   check_marker "${ENROLL_PY}" "AIRSOFT_CERT_ENROLLMENT_IDENTITY_BINDING_V1" "certificate identity binding"
@@ -260,8 +261,10 @@ else
   check_marker "${EUD_PY}" "AIRSOFT_AUTHENTICATED_EUD_STREAM_GUARD_V1" "stale stream owner guard"
   check_marker "${EUD_PY}" "AIRSOFT_CO_DAILY_STREAM_GUARD_V1" "daily CO stream guard"
   check_marker "${MISSION_PY}" "AIRSOFT_GAME_MISSION_ISOLATION_V1" "mission isolation patch"
+  check_marker "${MISSION_PY}" "AIRSOFT_GAME_CONTENT_ISOLATION_V1" "mission content metadata isolation patch"
+  check_marker "${DATA_PACKAGE_PY}" "AIRSOFT_GAME_CONTENT_ISOLATION_V1" "hash-addressed mission content download isolation patch"
 
-  if sudo -u "${OTS_RUN_USER}" env HOME="${OTS_HOME}" OTS_DATA_FOLDER="${OTS_DATA_FOLDER}" "${OTS_PYTHON}" -m py_compile "${TOKEN_PY}" "${ENROLL_PY}" "${EUD_PY}" "${MISSION_PY}"; then
+  if sudo -u "${OTS_RUN_USER}" env HOME="${OTS_HOME}" OTS_DATA_FOLDER="${OTS_DATA_FOLDER}" "${OTS_PYTHON}" -m py_compile "${TOKEN_PY}" "${ENROLL_PY}" "${EUD_PY}" "${MISSION_PY}" "${DATA_PACKAGE_PY}"; then
     pass "OpenTAKServer patched modules compile"
   else
     fail "OpenTAKServer patched modules compile"
@@ -329,6 +332,17 @@ else
   echo "--- end mission verifier output ---"
 fi
 rm -f "${MISSION_OUT}"
+
+CONTENT_OUT="$(mktemp)"
+if sudo -u "${OTS_RUN_USER}" env HOME="${OTS_HOME}" OTS_DATA_FOLDER="${OTS_DATA_FOLDER}" "${OTS_PYTHON}" "${PORTAL_ROOT}/scripts/installers/verify_ots_1713_game_content_isolation.py" >"${CONTENT_OUT}" 2>&1; then
+  pass "hash-addressed GameRed/GameBlue content isolation verifier"
+else
+  fail "hash-addressed GameRed/GameBlue content isolation verifier"
+  echo "--- content isolation verifier output ---"
+  cat "${CONTENT_OUT}"
+  echo "--- end content isolation verifier output ---"
+fi
+rm -f "${CONTENT_OUT}"
 
 section "STATE AND AUDIT FILES"
 check_mode_600_if_present "${PORTAL_ROOT}/instance/game_state.json" "game state"
