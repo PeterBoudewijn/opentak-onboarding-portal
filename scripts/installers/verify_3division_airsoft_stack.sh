@@ -255,7 +255,7 @@ else
   check_marker "${ENROLL_PY}" "AIRSOFT_CO_DEVICE_RESTORE_HISTORY_V1" "legacy CO restore history"
   check_marker "${ENROLL_PY}" "AIRSOFT_AUTHENTICATED_EUD_SWITCH_V1" "authenticated EUD switching"
   check_marker "${ENROLL_PY}" "AIRSOFT_CO_DAILY_CERT_WINDOW_V1" "daily CO certificate window"
-  check_marker "${ENROLL_PY}" "AIRSOFT_EUD_AUDIT_LOG_V1" "EUD switch audit log"
+  check_marker "${ENROLL_PY}" "AIRSOFT_EUD_AUDIT_LOG_V2" "fail-safe EUD switch audit log"
   check_marker "${EUD_PY}" "AIRSOFT_CO_DEVICE_OWNER_GUARD_V1" "CO EUD owner guard"
   check_marker "${EUD_PY}" "AIRSOFT_AUTHENTICATED_EUD_STREAM_GUARD_V1" "stale stream owner guard"
   check_marker "${EUD_PY}" "AIRSOFT_CO_DAILY_STREAM_GUARD_V1" "daily CO stream guard"
