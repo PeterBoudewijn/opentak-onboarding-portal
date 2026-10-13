@@ -128,7 +128,7 @@ case "${portal_db_backend}" in
     sqlite3 "${portal_db_name}" ".backup '${stage}/database/portal.sqlite'"
     ;;
   postgresql|postgres)
-    sudo -u postgres pg_dump --format=custom --file="${stage}/database/portal.dump" "${portal_db_name}"
+    sudo -u postgres pg_dump --format=custom "${portal_db_name}" >"${stage}/database/portal.dump"
     ;;
   *)
     echo "Unsupported portal database backend: ${portal_db_backend}" >&2
@@ -169,7 +169,7 @@ case "${ots_db_backend}" in
     sqlite3 "${ots_db_name}" ".backup '${stage}/database/ots.sqlite'"
     ;;
   postgresql|postgres)
-    sudo -u postgres pg_dump --format=custom --file="${stage}/database/ots.dump" "${ots_db_name}"
+    sudo -u postgres pg_dump --format=custom "${ots_db_name}" >"${stage}/database/ots.dump"
     ;;
   *)
     echo "Unsupported OTS database backend: ${ots_db_backend}" >&2
