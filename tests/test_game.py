@@ -180,3 +180,93 @@ def test_revoke_co_tak_access_deletes_token_and_deactivates_account(app, monkeyp
     assert result["enrollmentTokenRevoked"] is True
     assert result["accountDeactivated"] is True
     assert result["reason"] == "23:00_cutoff"
+
+
+
+def test_co_devices_admin_payload_marks_connected_and_revoked(app, monkeypatch):
+    monkeypatch.setattr(
+        game,
+        "_co_ots_username",
+        lambda team_key: "CORood" if team_key == "red" else "COBLauw",
+    )
+    monkeypatch.setattr(
+        game,
+        "_get_user_euds",
+        lambda username: (
+            [{
+                "uid": "device-red",
+                "callsign": "CORood",
+                "device": "Tablet",
+                "platform": "ATAK",
+                "version": "5.0",
+                "last_status": "Connected",
+                "last_event_time": "2026-10-13T18:00:00+00:00",
+            }]
+            if username == "CORood"
+            else [{
+                "uid": "device-blue",
+                "callsign": "COBlauw",
+                "device": "iPad",
+                "platform": "iTAK",
+                "version": "2.0",
+                "last_status": "Disconnected",
+                "last_event_time": "2026-10-13T17:00:00+00:00",
+            }]
+        ),
+    )
+    monkeypatch.setattr(
+        game,
+        "_co_device_profile_map",
+        lambda: {
+            "device-red": {
+                "airsoftCoCertificateSerial": "12345",
+                "airsoftCoValidUntil": "4102444800",
+            },
+            "device-blue": {
+                "airsoftCoCertificateSerial": "67890",
+                "airsoftCoValidUntil": "0",
+            },
+        },
+    )
+
+    with app.app_context():
+        payload = game._co_devices_admin_payload()
+
+    assert payload["teams"]["red"]["connectedCount"] == 1
+    assert payload["teams"]["red"]["deviceCount"] == 1
+    assert payload["teams"]["red"]["devices"][0]["connected"] is True
+    assert payload["teams"]["red"]["devices"][0]["certificateWindowBound"] is True
+    assert payload["teams"]["blue"]["devices"][0]["revoked"] is True
+    assert payload["teams"]["blue"]["devices"][0]["validUntil"] is None
+
+
+def test_co_device_profile_map_reads_internal_window_profiles(app, monkeypatch):
+    def fake_profiles(**kwargs):
+        key = kwargs["preference_key"]
+        if key == "airsoftCoCertificateSerial":
+            return {
+                "response": {
+                    "results": [{
+                        "eud_uid": "device-1",
+                        "preference_key": key,
+                        "preference_value": "123",
+                    }]
+                }
+            }
+        return {
+            "response": {
+                "results": [{
+                    "eud_uid": "device-1",
+                    "preference_key": key,
+                    "preference_value": "4102444800",
+                }]
+            }
+        }
+
+    monkeypatch.setattr(game.otsClient, "get_device_profiles", fake_profiles)
+
+    with app.app_context():
+        values = game._co_device_profile_map()
+
+    assert values["device-1"]["airsoftCoCertificateSerial"] == "123"
+    assert values["device-1"]["airsoftCoValidUntil"] == "4102444800"
