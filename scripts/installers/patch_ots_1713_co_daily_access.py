@@ -171,24 +171,22 @@ def _airsoft_set_co_certificate_window(username, eud, signed_certificate_pem):
             + source[strip_pos:]
         )
 
-    profile_old = '''        if uid and user:
-            _airsoft_apply_co_profile(user.username, eud)
-
-            # Repeated account switches previously accumulated Certificate rows
-'''
-    profile_new = '''        if uid and user:
-            _airsoft_apply_co_profile(user.username, eud)
-            _airsoft_set_co_certificate_window(
-                user.username,
-                eud,
-                signed_csr_pem,
-            )
-
-            # Repeated account switches previously accumulated Certificate rows
-'''
-    if profile_old not in source:
-        raise RuntimeError(f"CO certificate profile anchor missing: {path}")
-    source = source.replace(profile_old, profile_new, 1)
+    if "_airsoft_set_co_certificate_window(" not in source[source.find("def sign_csr_v2"):]:
+        profile_call = "            _airsoft_apply_co_profile(user.username, eud)\n"
+        sign_v2_pos = source.find("def sign_csr_v2")
+        profile_pos = source.find(profile_call, sign_v2_pos if sign_v2_pos >= 0 else 0)
+        if sign_v2_pos < 0 or profile_pos < 0:
+            raise RuntimeError(f"CO certificate profile anchor missing: {path}")
+        insert_pos = profile_pos + len(profile_call)
+        source = (
+            source[:insert_pos]
+            + "            _airsoft_set_co_certificate_window(\n"
+            + "                user.username,\n"
+            + "                eud,\n"
+            + "                signed_csr_pem,\n"
+            + "            )\n"
+            + source[insert_pos:]
+        )
 
     path.write_text(source, encoding="utf-8")
     return True
