@@ -163,7 +163,7 @@ DOWNLOAD_NEW = '''    file_hash = request.args.get("hash")
     if not file and request.method == "HEAD":
 '''
 
-MISSION_HELPER_ANCHOR = "\\ndef _airsoft_request_mission_name():\\n"
+MISSION_HELPER_ANCHOR = "\ndef _airsoft_request_mission_name():\n"
 
 MISSION_HELPER = r'''
 
