@@ -62,10 +62,14 @@ GAME_PERMANENT_OBSERVERS_BLUE = _env_csv('GAME_PERMANENT_OBSERVERS_BLUE')
 
 # OTS identities represented by the administrator-managed CO portal QR codes.
 GAME_CO_PORTAL_USERNAME_RED = str(environ.get('GAME_CO_PORTAL_USERNAME_RED', 'CORood')).strip()
-GAME_CO_PORTAL_USERNAME_BLUE = str(environ.get('GAME_CO_PORTAL_USERNAME_BLUE', 'COBLauw')).strip()
+GAME_CO_PORTAL_USERNAME_BLUE = str(environ.get('GAME_CO_PORTAL_USERNAME_BLUE', 'COBlauw')).strip()
 
 
 # Permanent bearer tokens used by the physical CO portal QR codes.
 # Generate these with scripts/installers/setup_game_co_qr_tokens.py.
 GAME_CO_QR_TOKEN_RED = str(environ.get('GAME_CO_QR_TOKEN_RED', '')).strip()
 GAME_CO_QR_TOKEN_BLUE = str(environ.get('GAME_CO_QR_TOKEN_BLUE', '')).strip()
+
+# Shared same-day ATAK enrollment for multiple CO devices. The token expires
+# at the normal 23:00 game cutoff; each device gets its own certificate/EUD.
+GAME_CO_TAK_MAX_USES = int(environ.get('GAME_CO_TAK_MAX_USES', '250'))
