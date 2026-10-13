@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { kioskAPI, settingsAPI, oidcAPI } from '../services/api';
+import { authStorage } from '../services/authStorage';
 import './Auth.css';
 
 const API_BASE_URL = window.location.origin;
@@ -60,7 +61,7 @@ function KioskLogin() {
       }
 
       // Check if user is already logged in
-      const token = localStorage.getItem('access_token');
+      const token = authStorage.getAccessToken();
       if (token) {
         setState('confirm');
       } else {
@@ -83,9 +84,8 @@ function KioskLogin() {
         password
       });
 
-      // Store tokens in localStorage so authenticateSession can use them
-      localStorage.setItem('access_token', res.data.access_token);
-      localStorage.setItem('refresh_token', res.data.refresh_token);
+      // Keep login credentials scoped to this browser tab/session.
+      authStorage.setTokens(res.data.access_token, res.data.refresh_token);
 
       setState('confirm');
     } catch (err) {
@@ -116,15 +116,15 @@ function KioskLogin() {
 
   const handleOIDCLogin = (providerId) => {
     // Store kiosk session ID so we can come back after OIDC
-    localStorage.setItem('kiosk_session_pending', sessionId);
+    sessionStorage.setItem('kiosk_session_pending', sessionId);
     window.location.href = `${API_BASE_URL}/api/v1/auth/oidc/${providerId}/authorize`;
   };
 
   // Check if we're returning from OIDC login with a pending kiosk session
   useEffect(() => {
-    const pendingSession = localStorage.getItem('kiosk_session_pending');
-    if (pendingSession && localStorage.getItem('access_token')) {
-      localStorage.removeItem('kiosk_session_pending');
+    const pendingSession = sessionStorage.getItem('kiosk_session_pending');
+    if (pendingSession && authStorage.getAccessToken()) {
+      sessionStorage.removeItem('kiosk_session_pending');
       if (pendingSession === sessionId) {
         setState('confirm');
       }
