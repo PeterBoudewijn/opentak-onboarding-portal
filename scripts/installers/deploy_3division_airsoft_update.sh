@@ -89,6 +89,7 @@ echo "Applying OpenTAKServer airsoft patches..."
 "${OTS_PYTHON}" "${PORTAL_ROOT}/scripts/installers/patch_ots_1713_authenticated_eud_switching.py"
 "${OTS_PYTHON}" "${PORTAL_ROOT}/scripts/installers/patch_ots_1713_co_daily_access.py"
 "${OTS_PYTHON}" "${PORTAL_ROOT}/scripts/installers/patch_ots_1713_eud_audit_log.py"
+sudo -u "${OTS_RUN_USER}" env HOME="${OTS_HOME}" OTS_DATA_FOLDER="${OTS_DATA_FOLDER}" "${OTS_PYTHON}" "${PORTAL_ROOT}/scripts/installers/patch_ots_1713_multi_device_callsigns.py"
 
 echo "Building frontend..."
 cd "${PORTAL_ROOT}/frontend"
