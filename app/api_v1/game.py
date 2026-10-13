@@ -761,6 +761,12 @@ def _ensure_permanent_team_memberships(team_key):
     failures = []
 
     for username, desired_directions in sorted(desired.items()):
+        # During the COBLauw -> COBlauw migration the new identity may not
+        # exist until the first blue CO enrollment. Do not spam warnings for a
+        # configured permanent identity that has not been created yet.
+        if not _ots_user_exists(username):
+            continue
+
         for direction in ("IN", "OUT"):
             present = (username, direction) in memberships
             should_exist = direction in desired_directions
