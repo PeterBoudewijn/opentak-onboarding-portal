@@ -14,6 +14,8 @@ OTS_RUN_USER="${OTS_RUN_USER:-team3d}"
 OTS_HOME="${OTS_HOME:-/home/team3d}"
 OTS_DATA_FOLDER="${OTS_DATA_FOLDER:-/home/team3d/ots-1713}"
 BACKUP_ROOT="${BACKUP_ROOT:-/var/backups/3division-airsoft}"
+VERIFY_BACKUP_AFTER_CREATE="${VERIFY_BACKUP_AFTER_CREATE:-1}"
+BACKUP_VERIFIER="${BACKUP_VERIFIER:-${PORTAL_ROOT}/scripts/installers/verify_3division_airsoft_backup.sh}"
 
 if [[ "${EUID}" -ne 0 ]]; then
   echo "Run this backup script with sudo/root." >&2
@@ -231,3 +233,14 @@ echo "Portal commit: ${portal_commit:0:12}"
 echo
 echo "IMPORTANT: this archive contains passwords, private CA material and database data."
 echo "Keep it root-only and copy it to encrypted/off-host storage."
+
+if [[ "${VERIFY_BACKUP_AFTER_CREATE}" == "1" ]]; then
+  if [[ ! -f "${BACKUP_VERIFIER}" ]]; then
+    echo "Backup verifier not found: ${BACKUP_VERIFIER}" >&2
+    exit 1
+  fi
+  echo
+  echo "Running non-destructive backup verification..."
+  bash "${BACKUP_VERIFIER}" "${archive}"
+  echo "Backup verification passed."
+fi
