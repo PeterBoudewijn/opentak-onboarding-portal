@@ -320,7 +320,7 @@ fi
 rm -f "${MEMBERSHIP_OUT}"
 
 MISSION_OUT="$(mktemp)"
-if env HOME=/home/team3d OTS_DATA_FOLDER="${OTS_DATA_FOLDER}" "${OTS_PYTHON}"   "${PORTAL_ROOT}/scripts/installers/verify_ots_1713_game_mission_isolation.py" >"${MISSION_OUT}" 2>&1; then
+if sudo -u "${OTS_RUN_USER}" env HOME="${OTS_HOME}" OTS_DATA_FOLDER="${OTS_DATA_FOLDER}" "${OTS_PYTHON}" "${PORTAL_ROOT}/scripts/installers/verify_ots_1713_game_mission_isolation.py" >"${MISSION_OUT}" 2>&1; then
   pass "strict mission isolation verifier"
 else
   fail "strict mission isolation verifier"
