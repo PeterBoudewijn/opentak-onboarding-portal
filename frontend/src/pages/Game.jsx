@@ -54,6 +54,9 @@ function Game({ forcedTeam = null }) {
   const [error, setError] = useState('');
   const [coQr, setCoQr] = useState(null);
   const [coTakAccess, setCoTakAccess] = useState({});
+  const [coTakPreparing, setCoTakPreparing] = useState({});
+  const [coTakPrepareError, setCoTakPrepareError] = useState({});
+  const [coTakVisible, setCoTakVisible] = useState({});
   const [, setTick] = useState(0);
 
   const admin = isAdmin();
@@ -112,43 +115,42 @@ function Game({ forcedTeam = null }) {
     }
   };
 
-  const loginCoTak = async (team) => {
-    const displayName = team === 'red' ? 'CORood' : 'COBlauw';
-    setBusy(`co-tak-${team}`);
-    setError('');
+  const prepareCoTak = async (team) => {
+    if (coTakPreparing[team]) return;
+    setCoTakPreparing((current) => ({ ...current, [team]: true }));
+    setCoTakPrepareError((current) => ({ ...current, [team]: '' }));
     try {
       const response = await gameAPI.generateCoTakAccess(team);
       const data = response.data || {};
+
+      if (!data.atak?.url || !data.itak?.quickConnect || !data.itak?.enrollmentCode) {
+        throw new Error('OpenTAKServer gaf geen volledige CO TAK-login terug.');
+      }
+
       setCoTakAccess((current) => ({ ...current, [team]: data }));
-
-      if (iosDevice) {
-        if (!data.itak?.quickConnect || !data.itak?.enrollmentCode) {
-          throw new Error('OpenTAKServer gaf geen volledige iTAK-login terug.');
-        }
-        // iTAK uses Quick Connect CSV rather than ATAK's Android tak:// enroll
-        // URI. Keep the user in the portal and show both the iTAK QR and the
-        // bounded enrollment credentials below.
-        return;
-      }
-
-      const atakUrl = data.atak?.url || data.takUrl;
-      if (!atakUrl) {
-        throw new Error('OpenTAKServer gaf geen ATAK-loginlink terug.');
-      }
-
-      // This is a direct user gesture. Android can hand the custom tak:// URL
-      // to ATAK-CIV and start certificate enrollment immediately.
-      window.location.assign(atakUrl);
     } catch (err) {
-      setError(
+      const message =
         err.response?.data?.error ||
         err.message ||
-        `Inloggen als ${displayName} op de TAK-server is mislukt.`
-      );
+        'CO TAK-login voorbereiden is mislukt.';
+      setCoTakPrepareError((current) => ({ ...current, [team]: message }));
     } finally {
-      setBusy(null);
+      setCoTakPreparing((current) => ({ ...current, [team]: false }));
     }
   };
+
+  useEffect(() => {
+    // Prepare the bounded enrollment token before the user presses the button.
+    // This is important on Android: the final tak:// navigation must happen
+    // directly from a user click or Chrome may block the custom app scheme.
+    teams
+      .filter((team) => team.coTakLogin?.available)
+      .forEach((team) => {
+        if (!coTakAccess[team.team] && !coTakPreparing[team.team] && !coTakPrepareError[team.team]) {
+          prepareCoTak(team.team);
+        }
+      });
+  }, [teams]);
 
   const cleanupTeam = async (team) => {
     const label = TEAM_LABELS[team] || team;
@@ -390,28 +392,54 @@ function Game({ forcedTeam = null }) {
                       een eigen clientcertificaat onder dezelfde CO-identiteit.
                     </p>
                   </div>
-                  <button
-                    className="game-co-tak-button"
-                    disabled={busy !== null}
-                    onClick={() => loginCoTak(team.team)}
-                  >
-                    {busy === `co-tak-${team.team}`
-                      ? 'TAK-login voorbereiden...'
-                      : `Inloggen als ${team.coTakLogin.username}`}
-                  </button>
+                  {coTakPreparing[team.team] && (
+                    <button className="game-co-tak-button" disabled>
+                      TAK-login voorbereiden...
+                    </button>
+                  )}
 
-                  {!iosDevice && coTakAccess[team.team]?.atak?.url && (
+                  {!coTakPreparing[team.team] && coTakPrepareError[team.team] && (
                     <div className="game-co-atak-fallback">
-                      <p className="game-warning">
-                        ATAK niet automatisch geopend? Gebruik onderstaande knop opnieuw.
-                      </p>
-                      <a className="game-co-tak-fallback" href={coTakAccess[team.team].atak.url}>
-                        ATAK opnieuw openen als {team.coTakLogin.username}
-                      </a>
+                      <div className="game-error">{coTakPrepareError[team.team]}</div>
+                      <button
+                        className="game-co-tak-button"
+                        type="button"
+                        onClick={() => prepareCoTak(team.team)}
+                      >
+                        TAK-login opnieuw voorbereiden
+                      </button>
                     </div>
                   )}
 
-                  {iosDevice && coTakAccess[team.team]?.itak && (
+                  {!iosDevice && coTakAccess[team.team]?.atak?.url && (
+                    <>
+                      <a
+                        className="game-co-tak-button game-co-tak-link"
+                        href={coTakAccess[team.team].atak.url}
+                      >
+                        Inloggen als {team.coTakLogin.username}
+                      </a>
+                      <p className="game-warning">
+                        Deze link opent ATAK-CIV direct. Als Android vraagt welke app de
+                        TAK-link moet openen, kies ATAK-CIV.
+                      </p>
+                    </>
+                  )}
+
+                  {iosDevice && coTakAccess[team.team]?.itak && !coTakVisible[team.team] && (
+                    <button
+                      className="game-co-tak-button"
+                      type="button"
+                      onClick={() => setCoTakVisible((current) => ({
+                        ...current,
+                        [team.team]: true,
+                      }))}
+                    >
+                      Inloggen als {team.coTakLogin.username}
+                    </button>
+                  )}
+
+                  {iosDevice && coTakAccess[team.team]?.itak && coTakVisible[team.team] && (
                     <div className="game-itak-login">
                       <h4>iTAK koppelen als {team.coTakLogin.username}</h4>
                       <p>
