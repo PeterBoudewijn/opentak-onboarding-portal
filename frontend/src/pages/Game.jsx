@@ -9,6 +9,30 @@ const TEAM_LABELS = { red: 'Rood', blue: 'Blauw' };
 const ATAK_APP_URL = 'https://play.google.com/store/apps/details?id=com.atakmap.app.civ';
 const ITAK_APP_URL = 'https://apps.apple.com/nl/app/itak/id1561656396';
 
+function isIOSDevice() {
+  const ua = navigator.userAgent || '';
+  return /iPad|iPhone|iPod/i.test(ua) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+async function copyText(value) {
+  if (!value) return;
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+
+  const textarea = document.createElement('textarea');
+  textarea.value = value;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand('copy');
+  document.body.removeChild(textarea);
+}
+
 function formatRemaining(iso) {
   if (!iso) return '';
   const diff = new Date(iso).getTime() - Date.now();
@@ -33,6 +57,7 @@ function Game({ forcedTeam = null }) {
   const [, setTick] = useState(0);
 
   const admin = isAdmin();
+  const iosDevice = useMemo(() => isIOSDevice(), []);
 
   const loadStatus = async () => {
     try {
@@ -96,14 +121,24 @@ function Game({ forcedTeam = null }) {
       const data = response.data || {};
       setCoTakAccess((current) => ({ ...current, [team]: data }));
 
-      if (!data.takUrl) {
+      if (iosDevice) {
+        if (!data.itak?.quickConnect || !data.itak?.enrollmentCode) {
+          throw new Error('OpenTAKServer gaf geen volledige iTAK-login terug.');
+        }
+        // iTAK uses Quick Connect CSV rather than ATAK's Android tak:// enroll
+        // URI. Keep the user in the portal and show both the iTAK QR and the
+        // bounded enrollment credentials below.
+        return;
+      }
+
+      const atakUrl = data.atak?.url || data.takUrl;
+      if (!atakUrl) {
         throw new Error('OpenTAKServer gaf geen ATAK-loginlink terug.');
       }
 
-      // The CO explicitly pressed the button, so hand the same device over to
-      // ATAK's custom enrollment URL. If Android returns to the browser, a
-      // fallback link remains visible below the button.
-      window.location.href = data.takUrl;
+      // This is a direct user gesture. Android can hand the custom tak:// URL
+      // to ATAK-CIV and start certificate enrollment immediately.
+      window.location.assign(atakUrl);
     } catch (err) {
       setError(
         err.response?.data?.error ||
@@ -343,8 +378,12 @@ function Game({ forcedTeam = null }) {
                     <h3>{team.coTakLogin.username}</h3>
                     <p>
                       Je bent in het portal ingelogd als <strong>{team.coTakLogin.username}</strong>.
-                      Open ATAK op dit toestel en meld het aan op de TAK-server met
-                      teamkleur <strong>{team.teamColor}</strong> en Role <strong>HQ</strong>.
+                      {iosDevice
+                        ? ' Maak hieronder de iTAK-koppeling voor dit toestel.'
+                        : ' Open ATAK op dit toestel en meld het direct aan op de TAK-server.'}
+                    </p>
+                    <p>
+                      Teamkleur <strong>{team.teamColor}</strong> · Role <strong>HQ</strong>
                     </p>
                     <p className="game-warning">
                       Meerdere CO&apos;s mogen dit tegelijk gebruiken. Ieder toestel krijgt
@@ -357,13 +396,85 @@ function Game({ forcedTeam = null }) {
                     onClick={() => loginCoTak(team.team)}
                   >
                     {busy === `co-tak-${team.team}`
-                      ? 'TAK-login openen...'
+                      ? 'TAK-login voorbereiden...'
                       : `Inloggen als ${team.coTakLogin.username}`}
                   </button>
-                  {coTakAccess[team.team]?.takUrl && (
-                    <a className="game-co-tak-fallback" href={coTakAccess[team.team].takUrl}>
-                      ATAK opnieuw openen als {team.coTakLogin.username}
-                    </a>
+
+                  {!iosDevice && coTakAccess[team.team]?.atak?.url && (
+                    <div className="game-co-atak-fallback">
+                      <p className="game-warning">
+                        ATAK niet automatisch geopend? Gebruik onderstaande knop opnieuw.
+                      </p>
+                      <a className="game-co-tak-fallback" href={coTakAccess[team.team].atak.url}>
+                        ATAK opnieuw openen als {team.coTakLogin.username}
+                      </a>
+                    </div>
+                  )}
+
+                  {iosDevice && coTakAccess[team.team]?.itak && (
+                    <div className="game-itak-login">
+                      <h4>iTAK koppelen als {team.coTakLogin.username}</h4>
+                      <p>
+                        iTAK gebruikt geen ATAK Android-deeplink. Scan deze Quick Connect QR
+                        vanuit iTAK vanaf een tweede scherm, of voeg dezelfde server handmatig toe.
+                      </p>
+
+                      <div className="game-itak-qr">
+                        <QRCodeSVG
+                          value={coTakAccess[team.team].itak.quickConnect}
+                          size={220}
+                          level="M"
+                        />
+                      </div>
+
+                      <dl className="game-itak-fields">
+                        <div>
+                          <dt>Server</dt>
+                          <dd>{coTakAccess[team.team].itak.host}</dd>
+                        </div>
+                        <div>
+                          <dt>Poort / protocol</dt>
+                          <dd>
+                            {coTakAccess[team.team].itak.port} / {coTakAccess[team.team].itak.protocol}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Gebruiker</dt>
+                          <dd>{coTakAccess[team.team].itak.username}</dd>
+                        </div>
+                      </dl>
+
+                      <p>
+                        Schakel in iTAK <strong>authenticatie</strong> en
+                        <strong> client certificate enrollment</strong> in. Gebruik onderstaande
+                        tijdelijke enrollmentcode als wachtwoord. De permanente CO-wachtwoorden
+                        worden niet gedeeld.
+                      </p>
+
+                      <code className="game-itak-token">
+                        {coTakAccess[team.team].itak.enrollmentCode}
+                      </code>
+
+                      <div className="game-itak-actions">
+                        <button
+                          type="button"
+                          onClick={() => copyText(coTakAccess[team.team].itak.enrollmentCode)}
+                        >
+                          Kopieer enrollmentcode
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => copyText(coTakAccess[team.team].itak.quickConnect)}
+                        >
+                          Kopieer Quick Connect
+                        </button>
+                      </div>
+
+                      <p className="game-warning">
+                        Deze enrollmentcode verloopt uiterlijk om 23:00. Na succesvolle
+                        enrollment gebruikt iTAK het eigen clientcertificaat van dit toestel.
+                      </p>
+                    </div>
                   )}
                 </div>
               )}
