@@ -275,7 +275,7 @@ function Game({ forcedTeam = null }) {
             Reset maakt de oude CO QR direct ongeldig, blokkeert bestaande CO-toegang via
             die QR en trekt ook alle tijdelijke speleraccounts van het betreffende team in.
             Tijdelijke OTS-users worden verwijderd zodra hun EUD is disconnected. CORood en
-            COBLauw blijven onaangetast. Print daarna de nieuwe QR voor de betreffende CO.
+            COBlauw blijven onaangetast. Print daarna de nieuwe QR voor de betreffende CO.
           </p>
         </section>
       )}
