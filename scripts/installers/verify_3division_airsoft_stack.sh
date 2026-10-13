@@ -12,6 +12,8 @@ PORTAL_URL="${PORTAL_URL:-https://atak.3division.eu/game/}"
 ENV_FILE="${PORTAL_ENV_FILE:-${PORTAL_ROOT}/.env}"
 OTS_PYTHON="${OTS_PYTHON:-/home/team3d/.opentakserver_venv_1713/bin/python}"
 OTS_DATA_FOLDER="${OTS_DATA_FOLDER:-/home/team3d/ots-1713}"
+OTS_RUN_USER="${OTS_RUN_USER:-team3d}"
+OTS_HOME="${OTS_HOME:-/home/team3d}"
 
 PASS_COUNT=0
 WARN_COUNT=0
@@ -229,7 +231,7 @@ fi
 rm -f "${AUDIT_FILE}"
 
 section "OPENTAKSERVER PATCHES"
-OTS_PACKAGE="$(env HOME=/home/team3d OTS_DATA_FOLDER="${OTS_DATA_FOLDER}" "${OTS_PYTHON}" - <<'PY' 2>/dev/null
+OTS_PACKAGE="$(sudo -u "${OTS_RUN_USER}" env HOME="${OTS_HOME}" OTS_DATA_FOLDER="${OTS_DATA_FOLDER}" "${OTS_PYTHON}" - <<'PY' 2>/dev/null
 import pathlib
 import opentakserver
 print(pathlib.Path(opentakserver.__file__).resolve().parent)
@@ -259,7 +261,7 @@ else
   check_marker "${EUD_PY}" "AIRSOFT_CO_DAILY_STREAM_GUARD_V1" "daily CO stream guard"
   check_marker "${MISSION_PY}" "AIRSOFT_GAME_MISSION_ISOLATION_V1" "mission isolation patch"
 
-  if "${OTS_PYTHON}" -m py_compile "${TOKEN_PY}" "${ENROLL_PY}" "${EUD_PY}" "${MISSION_PY}"; then
+  if sudo -u "${OTS_RUN_USER}" env HOME="${OTS_HOME}" OTS_DATA_FOLDER="${OTS_DATA_FOLDER}" "${OTS_PYTHON}" -m py_compile "${TOKEN_PY}" "${ENROLL_PY}" "${EUD_PY}" "${MISSION_PY}"; then
     pass "OpenTAKServer patched modules compile"
   else
     fail "OpenTAKServer patched modules compile"
@@ -268,7 +270,7 @@ fi
 
 section "GAME MEMBERSHIP AND MISSIONS"
 MEMBERSHIP_OUT="$(mktemp)"
-if env HOME=/home/team3d OTS_DATA_FOLDER="${OTS_DATA_FOLDER}" "${OTS_PYTHON}" - <<'PY' >"${MEMBERSHIP_OUT}" 2>&1
+if sudo -u "${OTS_RUN_USER}" env HOME="${OTS_HOME}" OTS_DATA_FOLDER="${OTS_DATA_FOLDER}" "${OTS_PYTHON}" - <<'PY' >"${MEMBERSHIP_OUT}" 2>&1
 from opentakserver.app import create_app
 from opentakserver.extensions import db
 from opentakserver.models.GroupUser import GroupUser
