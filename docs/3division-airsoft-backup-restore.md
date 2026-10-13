@@ -49,6 +49,33 @@ FAIL=0
 RESULT: PASS
 ```
 
+## Non-destructieve restore-rehearsal
+
+Na een geslaagde backupverificatie kan de volledige herstelketen worden getest zonder productie te wijzigen:
+
+```bash
+sudo bash \
+  /opt/opentak-onboarding-portal/scripts/installers/verify_3division_airsoft_restore_rehearsal.sh \
+  /var/backups/3division-airsoft/3division-airsoft-YYYYMMDD-HHMMSS.tar.gz
+```
+
+Deze rehearsal:
+
+- cloneert de portal vanuit de Git bundle naar een tijdelijke map;
+- pakt portal runtime-data uit;
+- opent en controleert een kopie van de portal SQLite-database;
+- herstelt de OTS PostgreSQL-dump in een tijdelijke testdatabase;
+- pakt OTS-data/CA en systeemconfig uit;
+- vergelijkt de herstelde root truststore met productie wanneer die aanwezig is;
+- verwijdert de tijdelijke PostgreSQL-database en bestanden automatisch.
+
+Een succesvolle rehearsal eindigt met:
+
+```text
+RESTORE REHEARSAL: PASS
+Productie is NIET gewijzigd.
+```
+
 ## Restore-principe
 
 Een productie-restore is bewust niet volledig geautomatiseerd. Een restore wist of vervangt databases, portal-state en OTS CA-data. Daarom moet een operator eerst de backup verifiëren en daarna expliciet de onderdelen terugzetten.
