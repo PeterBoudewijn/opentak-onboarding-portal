@@ -10,10 +10,10 @@ from sqlalchemy import inspect
 from opentakserver.app import create_app
 from opentakserver.extensions import db
 from opentakserver.models.EUD import EUD
+from opentakserver.models.MissionInvitation import MissionInvitation
 import opentakserver.eud_handler.EudHandler as eud_handler_module
 
 
-MODEL_MARKER = "AIRSOFT_MULTI_DEVICE_CALLSIGN_MODEL_V1"
 HANDLER_MARKER = "AIRSOFT_MULTI_DEVICE_CALLSIGN_ROUTING_V1"
 
 
@@ -57,6 +57,28 @@ def main() -> int:
             ok = False
         else:
             print("PASS ORM model allows duplicate callsigns")
+
+        invitation_fks = [
+            item
+            for item in inspector.get_foreign_keys("mission_invitations")
+            if item.get("referred_table") == "euds"
+            and set(item.get("constrained_columns") or []) == {"callsign"}
+            and set(item.get("referred_columns") or []) == {"callsign"}
+        ]
+        if invitation_fks:
+            print(
+                "FAIL mission_invitations.callsign still references euds.callsign: "
+                + ", ".join(str(item.get("name")) for item in invitation_fks)
+            )
+            ok = False
+        else:
+            print("PASS mission_invitations.callsign FK removed")
+
+        if MissionInvitation.__table__.c.callsign.foreign_keys:
+            print("FAIL ORM MissionInvitation.callsign still has an EUD foreign key")
+            ok = False
+        else:
+            print("PASS ORM MissionInvitation.callsign is a plain string")
 
     print()
     print("=== RABBITMQ ROUTING SOURCE ===")
