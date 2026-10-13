@@ -154,18 +154,22 @@ def _airsoft_set_co_certificate_window(username, eud, signed_certificate_pem):
 '''
     source = source.replace(helper_anchor, helper + helper_anchor, 1)
 
-    sign_old = '''        signed_csr = _airsoft_sign_csr(cert_authority, csr.encode(), common_name).decode("utf-8")
-        signed_csr = signed_csr.replace("-----BEGIN CERTIFICATE-----\n", "")
-'''
-    sign_new = '''        signed_csr_pem = _airsoft_sign_csr(
-            cert_authority, csr.encode(), common_name
-        ).decode("utf-8")
-        signed_csr = signed_csr_pem
-        signed_csr = signed_csr.replace("-----BEGIN CERTIFICATE-----\n", "")
-'''
-    if sign_old not in source:
-        raise RuntimeError(f"CO CSR signing anchor missing: {path}")
-    source = source.replace(sign_old, sign_new, 1)
+    # Preserve the unstripped PEM returned by the existing CO signing helper.
+    # Earlier deployed versions may format the helper call on one line or over
+    # several lines, so do not depend on that exact formatting.
+    if "signed_csr_pem = signed_csr" not in source:
+        sign_start = source.find("signed_csr = _airsoft_sign_csr")
+        strip_anchor = '        signed_csr = signed_csr.replace("-----BEGIN CERTIFICATE-----\\n", "")\n'
+        strip_pos = source.find(strip_anchor, sign_start if sign_start >= 0 else 0)
+        if sign_start < 0 or strip_pos < 0:
+            raise RuntimeError(
+                f"CO CSR signing/strip anchors missing: {path}"
+            )
+        source = (
+            source[:strip_pos]
+            + "        signed_csr_pem = signed_csr\n"
+            + source[strip_pos:]
+        )
 
     profile_old = '''        if uid and user:
             _airsoft_apply_co_profile(user.username, eud)
