@@ -106,7 +106,7 @@ systemctl is-active --quiet "${OTS_SERVICE}"
 
 echo "Synchronizing permanent GameRed/GameBlue observers..."
 cd "${PORTAL_ROOT}"
-sudo -u "${PORTAL_USER}" env HOME="${PORTAL_ROOT}" TESTING=True \
+sudo -u "${PORTAL_USER}" env HOME="${PORTAL_ROOT}" TESTING=True PYTHONPATH="${PORTAL_ROOT}" \
   "${PORTAL_ROOT}/venv/bin/python" \
   "${PORTAL_ROOT}/scripts/installers/sync_3division_airsoft_permanent_observers.py"
 
