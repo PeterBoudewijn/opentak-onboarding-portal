@@ -137,6 +137,8 @@ check_env "GAME_TAK_STREAM_PORT" "8089"
 check_env "CORS_ORIGINS" "https://atak.3division.eu"
 check_env "SESSION_COOKIE_SECURE" "True"
 check_env "SESSION_COOKIE_SAMESITE" "Lax"
+check_env "GAME_PERMANENT_OBSERVERS_RED" "3DAdmin,3DivisionGameMaster,3D01,3D10,3D19,3D09,3D17,3D08"
+check_env "GAME_PERMANENT_OBSERVERS_BLUE" "3DAdmin,3DivisionGameMaster,3D01,3D10,3D19,3D09,3D17,3D08"
 
 env_mode="$(stat -c '%a' "${ENV_FILE}" 2>/dev/null || true)"
 if [[ "${env_mode}" == "600" ]]; then
@@ -288,6 +290,12 @@ EXPECTED = {
     "COBLauw": {("GameBlue", "IN"), ("GameBlue", "OUT")},
     "3DAdmin": {("GameRed", "OUT"), ("GameBlue", "OUT")},
     "3DivisionGameMaster": {("GameRed", "OUT"), ("GameBlue", "OUT")},
+    "3D01": {("GameRed", "OUT"), ("GameBlue", "OUT")},
+    "3D10": {("GameRed", "OUT"), ("GameBlue", "OUT")},
+    "3D19": {("GameRed", "OUT"), ("GameBlue", "OUT")},
+    "3D09": {("GameRed", "OUT"), ("GameBlue", "OUT")},
+    "3D17": {("GameRed", "OUT"), ("GameBlue", "OUT")},
+    "3D08": {("GameRed", "OUT"), ("GameBlue", "OUT")},
 }
 
 app = create_app(cli=True)
