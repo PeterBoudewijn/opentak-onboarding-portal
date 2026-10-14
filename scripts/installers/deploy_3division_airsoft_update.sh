@@ -67,8 +67,8 @@ set_env_value "SESSION_COOKIE_SAMESITE" "Lax"
 
 # Watch-only users receive both teams but never get IN membership, so their own
 # PLI is not routed into GameRed/GameBlue.
-set_env_value "GAME_PERMANENT_OBSERVERS_RED" "3DAdmin,3DivisionGameMaster"
-set_env_value "GAME_PERMANENT_OBSERVERS_BLUE" "3DAdmin,3DivisionGameMaster"
+set_env_value "GAME_PERMANENT_OBSERVERS_RED" "3DAdmin,3DivisionGameMaster,3D01,3D10,3D19,3D09,3D17,3D08"
+set_env_value "GAME_PERMANENT_OBSERVERS_BLUE" "3DAdmin,3DivisionGameMaster,3D01,3D10,3D19,3D09,3D17,3D08"
 
 # CO login QR codes are intentionally created/reset from the administrator portal.
 # Existing legacy .env tokens, if present, are left untouched for compatibility.
@@ -104,11 +104,17 @@ echo "Restarting ${OTS_SERVICE}..."
 systemctl restart "${OTS_SERVICE}"
 systemctl is-active --quiet "${OTS_SERVICE}"
 
+echo "Synchronizing permanent GameRed/GameBlue observers..."
+cd "${PORTAL_ROOT}"
+sudo -u "${PORTAL_USER}" env HOME="${PORTAL_ROOT}" TESTING=True \
+  "${PORTAL_ROOT}/venv/bin/python" \
+  "${PORTAL_ROOT}/scripts/installers/sync_3division_airsoft_permanent_observers.py"
+
 echo
 echo "Airsoft game portal deployment completed."
 echo "GameRed send+receive: CORood"
 echo "GameBlue send+receive: COBlauw (OTS identity: COBLauw)"
-echo "Watch-only on both teams (OUT only): 3DAdmin, 3DivisionGameMaster"
+echo "Watch-only on both teams (OUT only): 3DAdmin, 3DivisionGameMaster, 3D01, 3D10, 3D19, 3D09, 3D17, 3D08"
 echo "The portal automatically removes IN membership from watch-only observers."
 echo "CO login QR codes are created and reset by an administrator in the portal."
 echo "Fresh authenticated ATAK/iTAK registration is authoritative for EUD ownership."
