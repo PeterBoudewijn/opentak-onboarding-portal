@@ -29,7 +29,7 @@ def create_app():
     if not app.config.get('TESTING'):
         logging.getLogger("apscheduler").setLevel(logging.INFO)
         # if you don't wanna use a config, you can set options here:
-        scheduler.api_enabled = True
+        scheduler.api_enabled = False
         scheduler.init_app(app)
     jwt_manager.init_app(app)
 
