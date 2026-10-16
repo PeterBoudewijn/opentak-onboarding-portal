@@ -213,7 +213,7 @@ function Dashboard() {
   const getTAKIconURL = () => `${API_BASE_URL}/static/img/atak.png`;
   const getItakIconURL = () => `${API_BASE_URL}/static/img/itak.jpg`;
 
-  const brandName = settings?.brand_name || 'My OTS Portal';
+  const brandName = settings?.brand_name || '3Division TAK Portal';
   const primaryColor = settings?.primary_color || '#34446c';
   const accentColor = settings?.accent_color || '#2f66f5';
   const hasAnyQRCode = settings?.generate_atak_qr_code || settings?.generate_itak_qr_code;
@@ -468,7 +468,7 @@ function Dashboard() {
                         <div style={{ padding: '1rem 0', minWidth: '180px' }}>
                           <p style={{ margin: '0 0 1rem', fontSize: '1.1rem', color: 'var(--text-primary)', fontWeight: 600 }}>{t('dashboard.slot')}:</p>
                           {[0, 1, 2, 3, 4, 5, 6, 7].map(slot => (
-                            <p key={slot} style={{ margin: '0.5rem 0', fontSize: '1.1rem', color: slotMap[slot] ? '#333' : '#999' }}>
+                            <p key={slot} style={{ margin: '0.5rem 0', fontSize: '1.1rem', color: slotMap[slot] ? 'var(--text-primary)' : 'var(--text-muted)' }}>
                               {slot}: {slotMap[slot] ? <strong>{slotMap[slot]}</strong> : <em>{t('dashboard.unused')}</em>}
                             </p>
                           ))}
