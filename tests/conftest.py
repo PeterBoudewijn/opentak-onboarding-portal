@@ -8,6 +8,21 @@ import sys
 # Add parent directory to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+# Isolate tests completely from the production .env and database.
+# These values MUST be set before importing anything from the app package.
+os.environ['DOTENV_PATH'] = '/dev/null'
+os.environ['TESTING'] = 'True'
+os.environ['ENABLE_API'] = 'True'
+os.environ['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
+os.environ['SECRET_KEY'] = 'test-secret-key-at-least-32-bytes-long'
+os.environ['JWT_SECRET_KEY'] = 'test-jwt-secret-at-least-32-bytes-long'
+os.environ['OTS_URL'] = 'http://localhost:8080'
+os.environ['OTS_USERNAME'] = 'test'
+os.environ['OTS_PASSWORD'] = 'test'
+os.environ['DEBUG'] = 'False'
+os.environ['MAIL_ENABLED'] = 'False'
+os.environ['MAIL_PORT'] = '25'
+
 from app import create_app
 from app.models import db as _db
 
@@ -21,8 +36,8 @@ def app():
     os.environ['TESTING'] = 'True'
     os.environ['ENABLE_API'] = 'True'
     os.environ['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
-    os.environ['SECRET_KEY'] = 'test-secret-key'
-    os.environ['JWT_SECRET_KEY'] = 'test-jwt-secret'
+    os.environ['SECRET_KEY'] = 'test-secret-key-at-least-32-bytes-long'
+    os.environ['JWT_SECRET_KEY'] = 'test-jwt-secret-at-least-32-bytes-long'
     os.environ['OTS_URL'] = 'http://localhost:8080'
     os.environ['OTS_USERNAME'] = 'test'
     os.environ['OTS_PASSWORD'] = 'test'
@@ -40,14 +55,11 @@ def app():
     # Override config after loading settings.py to ensure test values are used
     app.config['TESTING'] = True
     app.config['OTS_URL'] = 'http://localhost:8080'
-    app.config['TESTING'] = True
+    app.config['ENABLE_API'] = True
     app.config['WTF_CSRF_ENABLED'] = False
 
     # Import and register everything except scheduler
     from app.models import db as _db, migrate
-    from app.jina_filters import jina2_filters_blueprint
-    from flask_breadcrumbs import Breadcrumbs
-    from flask_menu import Menu
     from app.extensions import mail, jwt_manager, qrcode
     from flask_cors import CORS
     import logging
@@ -64,10 +76,6 @@ def app():
 
     _db.init_app(app)
     migrate.init_app(app, _db, render_as_batch=False)
-    menu = Menu()
-    breadcrumbs = Breadcrumbs(init_menu=False)
-    menu.init_app(app)
-    breadcrumbs.init_app(app)
     qrcode.init_app(app)
     jwt_manager.init_app(app)
 

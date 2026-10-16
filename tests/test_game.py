@@ -134,7 +134,7 @@ def test_itak_quick_connect_uses_public_host_and_stream_port(app):
 
 
 
-def test_blue_co_uses_historical_ots_identity_when_exact_display_name_is_absent(monkeypatch):
+def test_blue_co_uses_historical_ots_identity_when_exact_display_name_is_absent(app, monkeypatch):
     monkeypatch.setattr(game, "_find_ots_username_exact", lambda username: None)
     monkeypatch.setattr(
         game,
@@ -144,7 +144,8 @@ def test_blue_co_uses_historical_ots_identity_when_exact_display_name_is_absent(
     monkeypatch.setattr(game, "_ensure_team_isolation", lambda team, username: None)
     monkeypatch.setattr(game.otsClient, "activate_user", lambda username: {"status_code": 200})
 
-    assert game._ensure_co_ots_user("blue") == "COBLauw"
+    with app.app_context():
+        assert game._ensure_co_ots_user("blue") == "COBLauw"
 
 
 

@@ -16,7 +16,8 @@ def _env_csv(name, default=''):
     ]
 
 
-load_dotenv()
+_dotenv_path = environ.get('DOTENV_PATH')
+load_dotenv(dotenv_path=_dotenv_path if _dotenv_path else None)
 API_KEY = str(environ.get('API_KEY', secrets.token_hex(32)))
 SECRET_KEY=str(environ.get('SECRET_KEY'))
 OTS_USERNAME=str(environ.get('OTS_USERNAME'))
