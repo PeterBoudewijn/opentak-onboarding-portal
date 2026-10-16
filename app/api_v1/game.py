@@ -87,10 +87,11 @@ GAME_PASSWORD_STREETS = (
 
 
 def _human_game_password():
-    """Easy one-day password: a Dutch-style street name plus house number."""
+    """Human-readable one-day password with roughly 45 bits of entropy."""
     street = secrets.choice(GAME_PASSWORD_STREETS)
-    house_number = secrets.randbelow(90) + 10
-    return f"{street}{house_number}"
+    number = secrets.randbelow(900000) + 100000
+    suffix = "".join(secrets.choice(string.ascii_uppercase) for _ in range(4))
+    return f"{street}{number}{suffix}"
 
 
 def _new_session_username(team_key):

@@ -189,6 +189,14 @@ else
   fail "admin CO device API missing"
 fi
 
+if grep -Fq 'secrets.randbelow(900000) + 100000' "${GAME_PY}" \
+  && grep -Fq 'string.ascii_uppercase' "${GAME_PY}" \
+  && grep -Fq 'range(4)' "${GAME_PY}"; then
+  pass "temporary game credential strength check"
+else
+  fail "temporary game credential strength check"
+fi
+
 if grep -Fq 'Content-Security-Policy' "${APP_INIT}"   && grep -Fq 'Strict-Transport-Security' "${APP_INIT}"; then
   pass "portal security-header code present"
 else
