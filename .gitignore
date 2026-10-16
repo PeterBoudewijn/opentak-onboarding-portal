@@ -25,3 +25,12 @@ htmlcov/
 .pytest_cache/
 *.cover
 .hypothesis/
+
+
+# Local production/runtime files
+.env.bak.*
+.cache/
+.npm/
+.lesshst
+venv/
+*.bak-scheduler-*
