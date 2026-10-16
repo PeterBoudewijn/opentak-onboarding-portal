@@ -1431,7 +1431,7 @@ def _co_device_profile_map():
 
 
 def _co_devices_admin_payload():
-    """Build an administrator-only view of EUDs currently owned by CO accounts."""
+    """Build an administrator-only view of actively connected CO EUDs."""
     profile_values = _co_device_profile_map()
     now_epoch = int(datetime.now(timezone.utc).timestamp())
     teams = {}
@@ -1443,6 +1443,10 @@ def _co_devices_admin_payload():
         for eud in _get_user_euds(username):
             uid = str(eud.get("uid") or "").strip()
             if not uid:
+                continue
+
+            status = str(eud.get("last_status") or "Unknown").strip()
+            if status.casefold() != "connected":
                 continue
 
             profiles = profile_values.get(uid, {})
@@ -1458,6 +1462,9 @@ def _co_devices_admin_payload():
                 and valid_until_epoch > 0
                 and valid_until_epoch <= now_epoch
             )
+            if revoked or expired:
+                continue
+
             valid_until = (
                 datetime.fromtimestamp(valid_until_epoch, timezone.utc)
                 .astimezone(GAME_TZ)
@@ -1465,7 +1472,6 @@ def _co_devices_admin_payload():
                 if valid_until_epoch and valid_until_epoch > 0
                 else None
             )
-            status = str(eud.get("last_status") or "Unknown")
 
             devices.append({
                 "uid": uid,
@@ -1475,20 +1481,19 @@ def _co_devices_admin_payload():
                 "os": eud.get("os"),
                 "version": eud.get("version"),
                 "status": status,
-                "connected": status.casefold() == "connected",
+                "connected": True,
                 "lastSeen": eud.get("last_event_time"),
                 "certificateWindowBound": bool(
                     profiles.get("airsoftCoCertificateSerial")
                     and valid_until_epoch is not None
                 ),
                 "validUntil": valid_until,
-                "revoked": revoked,
-                "expired": expired,
+                "revoked": False,
+                "expired": False,
             })
 
         devices.sort(
             key=lambda item: (
-                not item["connected"],
                 str(item.get("callsign") or ""),
                 item["uid"],
             )
@@ -1497,7 +1502,7 @@ def _co_devices_admin_payload():
             "team": team_key,
             "username": _co_display_username(team_key),
             "serverUsername": username,
-            "connectedCount": sum(1 for item in devices if item["connected"]),
+            "connectedCount": len(devices),
             "deviceCount": len(devices),
             "devices": devices,
         }
@@ -1506,7 +1511,6 @@ def _co_devices_admin_payload():
         "timezone": "Europe/Amsterdam",
         "teams": teams,
     }
-
 
 @api_v1.route("/game/admin/co-devices", methods=["GET"])
 @jwt_required()

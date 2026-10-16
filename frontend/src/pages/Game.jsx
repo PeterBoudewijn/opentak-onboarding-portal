@@ -105,7 +105,7 @@ function Game({ forcedTeam = null }) {
   useEffect(() => {
     if (!admin) return undefined;
     loadCoDevices();
-    const timer = setInterval(loadCoDevices, 30000);
+    const timer = setInterval(loadCoDevices, 5000);
     return () => clearInterval(timer);
   }, [admin]);
 
@@ -360,13 +360,14 @@ function Game({ forcedTeam = null }) {
           <div className="game-card-title">
             <div>
               <span className="game-team-badge">BEHEER</span>
-              <h2>CO-apparaten</h2>
+              <h2>Actieve CO-apparaten</h2>
             </div>
           </div>
           <p>
-            Apparaten die op dit moment aan CORood of COBlauw gekoppeld zijn.
-            Connected apparaten staan bovenaan. Intrekken blokkeert alleen het
-            huidige CO-certificaat van dat toestel.
+            Alleen CO-apparaten die op dit moment actief verbonden zijn met CORood
+            of COBlauw worden getoond. Uitgelogde of disconnected apparaten verdwijnen
+            automatisch uit deze lijst. Intrekken blokkeert het huidige CO-certificaat
+            van dat toestel.
           </p>
 
           <div className="game-co-device-teams">
@@ -381,12 +382,12 @@ function Game({ forcedTeam = null }) {
                       <h3>{teamInfo?.username || (teamKey === 'red' ? 'CORood' : 'COBlauw')}</h3>
                     </div>
                     <div className="game-count">
-                      {teamInfo?.connectedCount || 0} connected / {teamInfo?.deviceCount || 0}
+                      {teamInfo?.deviceCount || 0} actief
                     </div>
                   </div>
 
                   {devices.length === 0 && (
-                    <p className="game-warning">Nog geen apparaten aan deze CO gekoppeld.</p>
+                    <p className="game-warning">Geen actieve CO-apparaten verbonden.</p>
                   )}
 
                   <div className="game-co-device-list">

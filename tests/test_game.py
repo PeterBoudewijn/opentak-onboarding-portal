@@ -184,7 +184,7 @@ def test_revoke_co_tak_access_deletes_token_and_deactivates_account(app, monkeyp
 
 
 
-def test_co_devices_admin_payload_marks_connected_and_revoked(app, monkeypatch):
+def test_co_devices_admin_payload_only_returns_active_devices(app, monkeypatch):
     monkeypatch.setattr(
         game,
         "_co_ots_username",
@@ -194,38 +194,68 @@ def test_co_devices_admin_payload_marks_connected_and_revoked(app, monkeypatch):
         game,
         "_get_user_euds",
         lambda username: (
-            [{
-                "uid": "device-red",
-                "callsign": "CORood",
-                "device": "Tablet",
-                "platform": "ATAK",
-                "version": "5.0",
-                "last_status": "Connected",
-                "last_event_time": "2026-10-13T18:00:00+00:00",
-            }]
+            [
+                {
+                    "uid": "device-red-active",
+                    "callsign": "CORood",
+                    "device": "Tablet",
+                    "platform": "ATAK",
+                    "version": "5.0",
+                    "last_status": "Connected",
+                    "last_event_time": "2026-10-13T18:00:00+00:00",
+                },
+                {
+                    "uid": "device-red-disconnected",
+                    "callsign": "CORood-old",
+                    "device": "Phone",
+                    "platform": "ATAK",
+                    "version": "5.0",
+                    "last_status": "Disconnected",
+                    "last_event_time": "2026-10-13T17:30:00+00:00",
+                },
+            ]
             if username == "CORood"
-            else [{
-                "uid": "device-blue",
-                "callsign": "COBlauw",
-                "device": "iPad",
-                "platform": "iTAK",
-                "version": "2.0",
-                "last_status": "Disconnected",
-                "last_event_time": "2026-10-13T17:00:00+00:00",
-            }]
+            else [
+                {
+                    "uid": "device-blue-revoked",
+                    "callsign": "COBlauw",
+                    "device": "iPad",
+                    "platform": "iTAK",
+                    "version": "2.0",
+                    "last_status": "Connected",
+                    "last_event_time": "2026-10-13T18:00:00+00:00",
+                },
+                {
+                    "uid": "device-blue-expired",
+                    "callsign": "COBlauw-old",
+                    "device": "iPhone",
+                    "platform": "iTAK",
+                    "version": "2.0",
+                    "last_status": "Connected",
+                    "last_event_time": "2026-10-13T17:00:00+00:00",
+                },
+            ]
         ),
     )
     monkeypatch.setattr(
         game,
         "_co_device_profile_map",
         lambda: {
-            "device-red": {
+            "device-red-active": {
                 "airsoftCoCertificateSerial": "12345",
                 "airsoftCoValidUntil": "4102444800",
             },
-            "device-blue": {
+            "device-red-disconnected": {
+                "airsoftCoCertificateSerial": "23456",
+                "airsoftCoValidUntil": "4102444800",
+            },
+            "device-blue-revoked": {
                 "airsoftCoCertificateSerial": "67890",
                 "airsoftCoValidUntil": "0",
+            },
+            "device-blue-expired": {
+                "airsoftCoCertificateSerial": "78901",
+                "airsoftCoValidUntil": "1",
             },
         },
     )
@@ -235,11 +265,15 @@ def test_co_devices_admin_payload_marks_connected_and_revoked(app, monkeypatch):
 
     assert payload["teams"]["red"]["connectedCount"] == 1
     assert payload["teams"]["red"]["deviceCount"] == 1
+    assert [item["uid"] for item in payload["teams"]["red"]["devices"]] == [
+        "device-red-active"
+    ]
     assert payload["teams"]["red"]["devices"][0]["connected"] is True
     assert payload["teams"]["red"]["devices"][0]["certificateWindowBound"] is True
-    assert payload["teams"]["blue"]["devices"][0]["revoked"] is True
-    assert payload["teams"]["blue"]["devices"][0]["validUntil"] is None
 
+    assert payload["teams"]["blue"]["connectedCount"] == 0
+    assert payload["teams"]["blue"]["deviceCount"] == 0
+    assert payload["teams"]["blue"]["devices"] == []
 
 def test_co_device_profile_map_reads_internal_window_profiles(app, monkeypatch):
     def fake_profiles(**kwargs):
