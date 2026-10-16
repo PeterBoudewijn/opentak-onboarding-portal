@@ -13,6 +13,23 @@ const safeInternalPath = (value) => {
   return value;
 };
 
+const getOidcExchangeCode = () => {
+  const hash = window.location.hash.startsWith('#')
+    ? window.location.hash.slice(1)
+    : window.location.hash;
+  if (!hash) return null;
+  return new URLSearchParams(hash).get('oidc_code');
+};
+
+const clearLocationHash = () => {
+  if (!window.location.hash) return;
+  window.history.replaceState(
+    null,
+    document.title,
+    `${window.location.pathname}${window.location.search}`
+  );
+};
+
 function Login() {
   const { t } = useTranslation();
   const [username, setUsername] = useState('');
@@ -74,11 +91,8 @@ function Login() {
 
   // Handle OIDC callback and magic link token
   useEffect(() => {
-    const oidcToken = searchParams.get('oidc_token');
-    const oidcRefresh = searchParams.get('oidc_refresh');
+    const oidcCode = getOidcExchangeCode();
     const oidcError = searchParams.get('oidc_error');
-    const needsPassword = searchParams.get('needs_password') === 'true';
-    const needsProfile = searchParams.get('needs_profile') === 'true';
     const magicToken = searchParams.get('magic_token');
 
     if (oidcError) {
@@ -87,25 +101,40 @@ function Login() {
       return;
     }
 
-    if (oidcToken && oidcRefresh) {
-      setSearchParams({});
+    if (oidcCode) {
+      // Remove the one-time code from browser history/address bar immediately.
+      clearLocationHash();
       setLoading(true);
 
-      oidcLogin(oidcToken, oidcRefresh).then((result) => {
-        if (result.success) {
-          // Check for pending kiosk session
-          const kioskSession = sessionStorage.getItem('kiosk_session_pending');
-          if (kioskSession) {
-            sessionStorage.removeItem('kiosk_session_pending');
-            navigate(`/kiosk-login/${kioskSession}`);
+      oidcAPI.exchangeCode(oidcCode)
+        .then(async (response) => {
+          const {
+            access_token,
+            refresh_token,
+            needs_password,
+            needs_profile,
+          } = response.data;
+
+          const result = await oidcLogin(access_token, refresh_token);
+          if (result.success) {
+            // Check for pending kiosk session
+            const kioskSession = sessionStorage.getItem('kiosk_session_pending');
+            if (kioskSession) {
+              sessionStorage.removeItem('kiosk_session_pending');
+              navigate(`/kiosk-login/${kioskSession}`);
+            } else {
+              navigateAfterLogin(needs_password, needs_profile);
+            }
           } else {
-            navigateAfterLogin(needsPassword, needsProfile);
+            setError(result.error || t('auth.oidcLoginFailed'));
           }
-        } else {
-          setError(result.error || t('auth.oidcLoginFailed'));
-        }
-        setLoading(false);
-      });
+        })
+        .catch((err) => {
+          setError(err.response?.data?.error || t('auth.oidcLoginFailed'));
+        })
+        .finally(() => {
+          setLoading(false);
+        });
       return;
     }
 
@@ -151,7 +180,7 @@ function Login() {
   const handleOIDCLogin = (providerId) => {
     // Preserve the QR/deep-link destination across the external login roundtrip.
     sessionStorage.setItem('post_login_next', postLoginPath);
-    window.location.href = `${API_BASE_URL}/api/v1/auth/oidc/${providerId}/authorize`;
+    window.location.href = oidcAPI.getAuthorizeUrl(providerId);
   };
 
   return (

@@ -184,3 +184,60 @@ class TestPendingRegistrationPasswordEncryption:
 
             with pytest.raises(RuntimeError, match='not encrypted'):
                 _ = pending.password
+
+
+class TestOIDCExchangeSecurity:
+    """Test the one-time OIDC-to-JWT browser handoff."""
+
+    def test_oidc_exchange_code_is_hashed_and_single_use(self, client, sample_user):
+        import hashlib
+        from datetime import datetime, timedelta
+        from app.models import OneTimeTokenModel
+
+        code = 'test-oidc-one-time-code'
+        code_hash = hashlib.sha256(code.encode('utf-8')).hexdigest()
+
+        token = OneTimeTokenModel.create_token(
+            user_id=sample_user.id,
+            token=code_hash,
+            token_type='oidc_exchange',
+            expires_at=datetime.now() + timedelta(minutes=2),
+        )
+        assert token.token == code_hash
+        assert token.token != code
+
+        with client.session_transaction() as browser_session:
+            browser_session['oidc_exchange_hash'] = code_hash
+
+        response = client.post('/api/v1/auth/oidc/exchange', json={'code': code})
+        assert response.status_code == 200
+        data = response.get_json()
+        assert 'access_token' in data
+        assert 'refresh_token' in data
+
+        # Even if the browser session hash were replayed, the DB token is spent.
+        with client.session_transaction() as browser_session:
+            browser_session['oidc_exchange_hash'] = code_hash
+
+        replay = client.post('/api/v1/auth/oidc/exchange', json={'code': code})
+        assert replay.status_code == 400
+        assert replay.get_json()['code'] == 'INVALID_OIDC_EXCHANGE'
+
+    def test_oidc_exchange_code_is_bound_to_browser_session(self, client, sample_user):
+        import hashlib
+        from datetime import datetime, timedelta
+        from app.models import OneTimeTokenModel
+
+        code = 'test-oidc-browser-bound-code'
+        code_hash = hashlib.sha256(code.encode('utf-8')).hexdigest()
+
+        OneTimeTokenModel.create_token(
+            user_id=sample_user.id,
+            token=code_hash,
+            token_type='oidc_exchange',
+            expires_at=datetime.now() + timedelta(minutes=2),
+        )
+
+        response = client.post('/api/v1/auth/oidc/exchange', json={'code': code})
+        assert response.status_code == 400
+        assert response.get_json()['code'] == 'INVALID_OIDC_EXCHANGE'

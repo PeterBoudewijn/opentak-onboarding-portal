@@ -583,9 +583,15 @@ export const apiKeysAPI = {
 
 // OIDC Provider API
 export const oidcAPI = {
-  // Public — for login page buttons
+  // Public — for login page buttons and callback handoff
   getProviders: () =>
     api.get('/auth/oidc/providers'),
+
+  getAuthorizeUrl: (providerId) =>
+    `${API_BASE_URL}/api/v1/auth/oidc/${providerId}/authorize`,
+
+  exchangeCode: (code) =>
+    api.post('/auth/oidc/exchange', { code }),
 
   // Admin — CRUD for managing OIDC providers
   admin: {

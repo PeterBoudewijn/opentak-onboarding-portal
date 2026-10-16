@@ -3,6 +3,8 @@ OIDC (OpenID Connect) authentication endpoints.
 Supports multiple OIDC providers with per-provider branding and role mapping.
 """
 
+import hashlib
+import hmac
 import json
 import os
 import uuid
@@ -16,12 +18,12 @@ from flask_jwt_extended import (
     jwt_required,
     get_jwt_identity,
 )
-from datetime import timedelta
+from datetime import datetime, timedelta
 from authlib.integrations.requests_client import OAuth2Session
 from authlib.jose import jwt as jose_jwt, JsonWebKey
 
 from app.api_v1 import api_v1
-from app.models import db, UserModel, UserRoleModel, OIDCProviderModel, SystemSettingsModel
+from app.models import db, UserModel, UserRoleModel, OIDCProviderModel, SystemSettingsModel, OneTimeTokenModel
 from app.rbac import require_role
 
 
@@ -68,6 +70,82 @@ def _build_callback_url(provider_id):
     frontend_url = _get_frontend_url()
     # The callback must go to the backend API endpoint
     return f"{frontend_url}/api/v1/auth/oidc/{provider_id}/callback"
+
+
+OIDC_EXCHANGE_TOKEN_TYPE = 'oidc_exchange'
+OIDC_EXCHANGE_TTL_SECONDS = 120
+
+
+def _hash_oidc_exchange_code(code):
+    return hashlib.sha256(code.encode('utf-8')).hexdigest()
+
+
+def _create_oidc_exchange_code(user_id):
+    """Create a short-lived, one-time code bound to this browser session."""
+    # Keep at most one live OIDC exchange token per user.
+    OneTimeTokenModel.query.filter_by(
+        user_id=user_id,
+        token_type=OIDC_EXCHANGE_TOKEN_TYPE,
+    ).delete(synchronize_session=False)
+    db.session.commit()
+
+    code = secrets.token_urlsafe(48)
+    code_hash = _hash_oidc_exchange_code(code)
+    expires_at = datetime.now() + timedelta(seconds=OIDC_EXCHANGE_TTL_SECONDS)
+
+    token = OneTimeTokenModel.create_token(
+        user_id=user_id,
+        token=code_hash,
+        token_type=OIDC_EXCHANGE_TOKEN_TYPE,
+        expires_at=expires_at,
+    )
+    if not token:
+        raise RuntimeError("Failed to create OIDC exchange code")
+
+    # Bind redemption to the same signed Flask session that completed OIDC.
+    # Only the hash is stored in the session and database.
+    session['oidc_exchange_hash'] = code_hash
+    return code
+
+
+def _consume_oidc_exchange_code(code):
+    """Atomically consume a browser-bound OIDC exchange code."""
+    if not isinstance(code, str) or not code:
+        return None
+
+    code_hash = _hash_oidc_exchange_code(code)
+    expected_hash = session.pop('oidc_exchange_hash', None)
+    if not expected_hash or not hmac.compare_digest(expected_hash, code_hash):
+        return None
+
+    now = datetime.now()
+    token = OneTimeTokenModel.query.filter(
+        OneTimeTokenModel.token == code_hash,
+        OneTimeTokenModel.token_type == OIDC_EXCHANGE_TOKEN_TYPE,
+        OneTimeTokenModel.is_used.is_(False),
+        OneTimeTokenModel.expires_at >= now,
+    ).first()
+    if not token:
+        return None
+
+    user_id = token.user_id
+    updated = OneTimeTokenModel.query.filter(
+        OneTimeTokenModel.id == token.id,
+        OneTimeTokenModel.is_used.is_(False),
+    ).update(
+        {
+            OneTimeTokenModel.is_used: True,
+            OneTimeTokenModel.used_at: now,
+        },
+        synchronize_session=False,
+    )
+
+    if updated != 1:
+        db.session.rollback()
+        return None
+
+    db.session.commit()
+    return user_id
 
 
 # =============================================================================
@@ -144,7 +222,8 @@ def oidc_authorize(provider_id):
 def oidc_callback(provider_id):
     """
     Handle OIDC callback after user authenticates with the provider.
-    Validates tokens, creates/links local user, generates JWT, redirects to frontend.
+    Validates tokens, creates/links the local user, then redirects with a
+    short-lived one-time exchange code. Portal JWTs never enter the URL.
     """
     frontend_url = _get_frontend_url()
 
@@ -335,37 +414,55 @@ def oidc_callback(provider_id):
 
         db.session.commit()
 
-        # Generate JWT tokens
-        access_token = create_access_token(
-            identity=str(user.id),
-            additional_claims={
-                'username': user.username,
-                'roles': [role.name for role in user.roles]
-            },
-            expires_delta=timedelta(hours=12)
-        )
-        refresh_token = create_refresh_token(
-            identity=str(user.id),
-            expires_delta=timedelta(days=30)
-        )
-
-        # Build redirect URL with tokens
-        needs_password = 'true' if not user.has_password else 'false'
-        needs_profile = 'true' if (not user.email or not user.callsign) else 'false'
-
-        redirect_url = (
-            f"{frontend_url}/login"
-            f"?oidc_token={access_token}"
-            f"&oidc_refresh={refresh_token}"
-            f"&needs_password={needs_password}"
-            f"&needs_profile={needs_profile}"
-        )
-
-        return redirect(redirect_url)
+        # Exchange the completed OIDC login for portal JWTs through a separate
+        # POST request. The fragment is not sent to nginx/Flask in the frontend
+        # request and contains only a two-minute, one-time code.
+        exchange_code = _create_oidc_exchange_code(user.id)
+        return redirect(f"{frontend_url}/login#oidc_code={exchange_code}")
 
     except Exception as e:
         current_app.logger.error(f"OIDC callback error: {str(e)}", exc_info=True)
         return redirect(f"{frontend_url}/login?oidc_error=Authentication+failed.+Please+try+again.")
+
+
+@api_v1.route('/auth/oidc/exchange', methods=['POST'])
+def oidc_exchange():
+    """Exchange a short-lived OIDC handoff code for portal JWTs."""
+    data = request.get_json(silent=True) or {}
+    code = data.get('code')
+
+    user_id = _consume_oidc_exchange_code(code)
+    if not user_id:
+        return jsonify({
+            'error': 'Invalid or expired OIDC exchange code',
+            'code': 'INVALID_OIDC_EXCHANGE'
+        }), 400
+
+    user = UserModel.get_user_by_id(user_id)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+
+    access_token = create_access_token(
+        identity=str(user.id),
+        additional_claims={
+            'username': user.username,
+            'roles': [role.name for role in user.roles]
+        },
+        expires_delta=timedelta(hours=12)
+    )
+    refresh_token = create_refresh_token(
+        identity=str(user.id),
+        expires_delta=timedelta(days=30)
+    )
+
+    current_app.logger.info(f"OIDC exchange completed for user {user.username}")
+
+    return jsonify({
+        'access_token': access_token,
+        'refresh_token': refresh_token,
+        'needs_password': not user.has_password,
+        'needs_profile': not user.email or not user.callsign,
+    }), 200
 
 
 # =============================================================================

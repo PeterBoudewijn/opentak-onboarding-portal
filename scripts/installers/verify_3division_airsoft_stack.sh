@@ -169,7 +169,7 @@ fi
 
 section "PORTAL PYTHON"
 PORTAL_PYTHON="${PORTAL_ROOT}/venv/bin/python"
-if sudo -u "${PORTAL_USER}" env HOME="${PORTAL_ROOT}" "${PORTAL_PYTHON}" -m py_compile   "${PORTAL_ROOT}/app/__init__.py"   "${PORTAL_ROOT}/app/settings.py"   "${PORTAL_ROOT}/app/ots.py"   "${PORTAL_ROOT}/app/api_v1/__init__.py"   "${PORTAL_ROOT}/app/api_v1/game.py"   "${PORTAL_ROOT}/app/api_v1/announcements.py"; then
+if sudo -u "${PORTAL_USER}" env HOME="${PORTAL_ROOT}" "${PORTAL_PYTHON}" -m py_compile   "${PORTAL_ROOT}/app/__init__.py"   "${PORTAL_ROOT}/app/settings.py"   "${PORTAL_ROOT}/app/ots.py"   "${PORTAL_ROOT}/app/api_v1/__init__.py"   "${PORTAL_ROOT}/app/api_v1/game.py"   "${PORTAL_ROOT}/app/api_v1/announcements.py"   "${PORTAL_ROOT}/app/api_v1/oidc.py"; then
   pass "portal Python compile"
 else
   fail "portal Python compile"
@@ -224,6 +224,20 @@ else
   sed -n '1,20p' "${PENDING_PASSWORD_OUT}"
 fi
 rm -f "${PENDING_PASSWORD_OUT}"
+
+OIDC_PY="${PORTAL_ROOT}/app/api_v1/oidc.py"
+LOGIN_JSX="${PORTAL_ROOT}/frontend/src/pages/Login.jsx"
+check_marker "${OIDC_PY}" "OIDC_EXCHANGE_TOKEN_TYPE = 'oidc_exchange'" "OIDC one-time exchange code"
+check_marker "${OIDC_PY}" "login#oidc_code=" "OIDC fragment handoff"
+
+if grep -Fq '?oidc_token=' "${OIDC_PY}" \
+  || grep -Fq '&oidc_refresh=' "${OIDC_PY}" \
+  || grep -Fq "searchParams.get('oidc_token')" "${LOGIN_JSX}" \
+  || grep -Fq "searchParams.get('oidc_refresh')" "${LOGIN_JSX}"; then
+  fail "OIDC JWT tokens still exposed through URL parameters"
+else
+  pass "OIDC JWT tokens absent from URL handoff"
+fi
 
 section "FRONTEND SOURCE"
 FRONTEND_SRC="${PORTAL_ROOT}/frontend/src"
