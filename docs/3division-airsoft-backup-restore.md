@@ -30,8 +30,9 @@ De backupscript maakt onder andere:
 - een consistente portal-databasebackup;
 - een consistente OTS-databasebackup;
 - het volledige `OTS_DATA_FOLDER`, inclusief CA/certificaatdata;
-- relevante systemd/Nginx-configuratie;
-- Python/npm-versie-informatie;
+- relevante hostconfiguratie: systemd, Nginx, Prosody/XMPP, UFW, fail2ban, RabbitMQ, Mumble en SSH-daemonconfiguratie;
+- Let's Encrypt renewal-configuratie en hooks (de private web-TLS-sleutels zelf worden niet gekopieerd);
+- Python/npm/apt-versie-informatie en snapshots van ingeschakelde services, UFW en effectieve SSH-configuratie;
 - SHA-256 checksums van alle onderdelen.
 
 Na het maken wordt de backup automatisch non-destructief geverifieerd.
@@ -63,8 +64,8 @@ Deze rehearsal:
 
 - cloneert de portal vanuit de Git bundle naar een tijdelijke map;
 - pakt portal runtime-data uit;
-- opent en controleert een kopie van de portal SQLite-database;
-- herstelt de OTS PostgreSQL-dump in een tijdelijke testdatabase;
+- opent en controleert een kopie van de portal SQLite-database, of herstelt de portal PostgreSQL-dump in een tijdelijke testdatabase;
+- herstelt de OTS PostgreSQL-dump in een aparte tijdelijke testdatabase;
 - pakt OTS-data/CA en systeemconfig uit;
 - vergelijkt de herstelde root truststore met productie wanneer die aanwezig is;
 - verwijdert de tijdelijke PostgreSQL-database en bestanden automatisch.
@@ -218,15 +219,18 @@ Wanneer de portal SQLite gebruikt, wordt `database/portal.sqlite` rechtstreeks n
 
 Als portal en OTS onverhoopt dezelfde PostgreSQL-databasenaam gebruiken, herstel die database maar één keer en onderzoek eerst welke dump als autoritatief moet gelden.
 
-## Systemd/Nginx terugzetten
+## Hostconfiguratie terugzetten
 
-Alleen nodig bij een nieuwe host of beschadigde configuratie:
+Het systeemarchief bevat onder meer systemd, Nginx, Prosody/XMPP, UFW, fail2ban, RabbitMQ, Mumble en de SSH-daemonconfiguratie. SSH-hostsleutels en Let's Encrypt-private keys worden bewust niet geback-upt.
+
+Zet dit archief alleen volledig terug op een nieuwe host of wanneer je bewust de hostconfiguratie wilt reconstrueren:
 
 ```bash
 sudo tar --same-owner -xzf   /var/tmp/3division-airsoft-restore-test/system/system-config.tar.gz   -C /
 
 sudo systemctl daemon-reload
 sudo nginx -t
+sudo sshd -t
 ```
 
 Web-TLS-certificaten van Let's Encrypt zitten bewust niet in deze backup; die kunnen opnieuw worden uitgegeven. De TAK CA/certificaatstate zit wel in `OTS_DATA_FOLDER`.

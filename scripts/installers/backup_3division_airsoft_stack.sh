@@ -191,25 +191,64 @@ esac
 # OTS_DATA_FOLDER contains the irreplaceable TAK CA/certificate state.
 tar --acls --xattrs --numeric-owner -czf "${stage}/ots/ots-data.tar.gz"   -C "$(dirname "${OTS_DATA_FOLDER}")" "$(basename "${OTS_DATA_FOLDER}")"
 
-# Keep service/Nginx configuration needed to reconstruct the host. Web TLS
-# certificates can be reissued; the TAK CA itself is already in OTS_DATA_FOLDER.
+# Keep host configuration needed to reconstruct the TAK server. The archive
+# already contains secrets, so service credentials and Prosody certificates may
+# be included. SSH host private keys and Let's Encrypt private keys are
+# deliberately not copied; those identities can be regenerated/reissued.
 system_items=()
-for item in   etc/systemd/system/opentak-portal.service   etc/systemd/system/opentakserver-1713.service   etc/nginx/nginx.conf   etc/nginx/sites-available   etc/nginx/sites-enabled   etc/nginx/conf.d   etc/nginx/mtls-atak
+for item in \
+  etc/systemd/system \
+  etc/nginx/nginx.conf \
+  etc/nginx/sites-available \
+  etc/nginx/sites-enabled \
+  etc/nginx/conf.d \
+  etc/nginx/mtls-atak \
+  etc/prosody \
+  etc/ufw \
+  etc/fail2ban \
+  etc/rabbitmq \
+  etc/mumble-server.ini \
+  etc/default/mumble-server \
+  etc/ssh/sshd_config \
+  etc/ssh/sshd_config.d \
+  etc/letsencrypt/renewal \
+  etc/letsencrypt/renewal-hooks
 do
   if [[ -e "/${item}" ]]; then
     system_items+=("${item}")
   fi
 done
 if (( ${#system_items[@]} > 0 )); then
-  tar --acls --xattrs --numeric-owner -czf "${stage}/system/system-config.tar.gz"     -C / "${system_items[@]}"
+  tar --acls --xattrs --numeric-owner -czf "${stage}/system/system-config.tar.gz" \
+    -C / "${system_items[@]}"
 else
   tar -czf "${stage}/system/system-config.tar.gz" --files-from /dev/null
 fi
 
-# Version metadata helps rebuild virtualenvs if a full host restore is needed.
+# Capture effective host state as reconstruction aids. These are informational
+# snapshots only; the authoritative configuration files are in system-config.
+systemctl list-unit-files --state=enabled --no-pager \
+  >"${stage}/system/enabled-units.txt" 2>&1 || true
+if command -v ufw >/dev/null 2>&1; then
+  ufw status verbose >"${stage}/system/ufw-status.txt" 2>&1 || true
+fi
+if command -v sshd >/dev/null 2>&1; then
+  sshd -T >"${stage}/system/sshd-effective.txt" 2>&1 || true
+fi
+if command -v fail2ban-client >/dev/null 2>&1; then
+  fail2ban-client status >"${stage}/system/fail2ban-status.txt" 2>&1 || true
+fi
+
+# Version metadata helps rebuild virtualenvs and OS packages if a full host
+# restore is needed.
 sudo -u "${PORTAL_USER}" "${PORTAL_PYTHON}" -m pip freeze >"${stage}/versions/portal-pip-freeze.txt" 2>/dev/null || true
 sudo -u "${OTS_RUN_USER}" "${OTS_PYTHON}" -m pip freeze >"${stage}/versions/ots-pip-freeze.txt" 2>/dev/null || true
-sudo -u "${PORTAL_USER}" bash -c 'cd "$1/frontend" && npm ls --depth=0' _ "${PORTAL_ROOT}"   >"${stage}/versions/frontend-npm.txt" 2>&1 || true
+sudo -u "${PORTAL_USER}" bash -c 'cd "$1/frontend" && npm ls --depth=0' _ "${PORTAL_ROOT}" \
+  >"${stage}/versions/frontend-npm.txt" 2>&1 || true
+if command -v dpkg-query >/dev/null 2>&1; then
+  dpkg-query -W -f='${binary:Package}\t${Version}\n' \
+    >"${stage}/versions/apt-packages.tsv" 2>/dev/null || true
+fi
 uname -a >"${stage}/versions/uname.txt"
 if command -v lsb_release >/dev/null 2>&1; then
   lsb_release -a >"${stage}/versions/os-release.txt" 2>&1 || true

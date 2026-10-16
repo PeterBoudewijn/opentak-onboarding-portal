@@ -161,18 +161,45 @@ fi
 
 echo
 echo "========== SYSTEM CONFIG =========="
-if [[ -f "${tmp}/system/system-config.tar.gz" ]] && tar -tzf "${tmp}/system/system-config.tar.gz" >/dev/null; then
-  pass "system/Nginx config archive readable"
+SYSTEM_LIST="${tmp}/system-config-list.txt"
+if [[ -f "${tmp}/system/system-config.tar.gz" ]] && tar -tzf "${tmp}/system/system-config.tar.gz" >"${SYSTEM_LIST}"; then
+  pass "system configuration archive readable"
+
+  check_system_marker() {
+    local marker="$1"
+    local label="$2"
+    if grep -Fq "${marker}" "${SYSTEM_LIST}"; then
+      pass "${label} present in system backup"
+    else
+      warn "${label} not found in system backup"
+    fi
+  }
+
+  check_system_marker "etc/systemd/system/" "systemd configuration"
+  check_system_marker "etc/nginx/" "Nginx configuration"
+  check_system_marker "etc/prosody/" "Prosody/XMPP configuration"
+  check_system_marker "etc/ufw/" "UFW firewall configuration"
+  check_system_marker "etc/fail2ban/" "fail2ban configuration"
+  check_system_marker "etc/rabbitmq/" "RabbitMQ configuration"
+  check_system_marker "etc/ssh/sshd_config" "SSH daemon configuration"
 else
-  fail "system/Nginx config archive unreadable/missing"
+  fail "system configuration archive unreadable/missing"
 fi
 
-for file in   "${tmp}/versions/portal-pip-freeze.txt"   "${tmp}/versions/ots-pip-freeze.txt"   "${tmp}/versions/frontend-npm.txt"
+for file in \
+  "${tmp}/system/enabled-units.txt" \
+  "${tmp}/system/ufw-status.txt" \
+  "${tmp}/system/sshd-effective.txt" \
+  "${tmp}/system/fail2ban-status.txt" \
+  "${tmp}/versions/portal-pip-freeze.txt" \
+  "${tmp}/versions/ots-pip-freeze.txt" \
+  "${tmp}/versions/frontend-npm.txt" \
+  "${tmp}/versions/apt-packages.tsv"
 do
   if [[ -f "${file}" ]]; then
-    pass "version metadata: $(basename "${file}")"
+    pass "rebuild metadata: $(basename "${file}")"
   else
-    warn "version metadata missing: $(basename "${file}")"
+    warn "rebuild metadata missing: $(basename "${file}")"
   fi
 done
 

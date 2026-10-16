@@ -34,11 +34,16 @@ done
 }
 
 WORK="$(mktemp -d /var/tmp/3division-airsoft-restore-rehearsal.XXXXXX)"
-TESTDB="airsoft_restore_test_$(date +%Y%m%d%H%M%S)_$$"
+TEST_STAMP="$(date +%Y%m%d%H%M%S)_$$"
+PORTAL_TESTDB="airsoft_portal_restore_test_${TEST_STAMP}"
+OTS_TESTDB="airsoft_ots_restore_test_${TEST_STAMP}"
 
 cleanup() {
-  if [[ "${TESTDB}" == airsoft_restore_test_* ]]; then
-    sudo -u postgres dropdb --if-exists "${TESTDB}" >/dev/null 2>&1 || true
+  if [[ "${PORTAL_TESTDB}" == airsoft_portal_restore_test_* ]]; then
+    sudo -u postgres dropdb --if-exists "${PORTAL_TESTDB}" >/dev/null 2>&1 || true
+  fi
+  if [[ "${OTS_TESTDB}" == airsoft_ots_restore_test_* ]]; then
+    sudo -u postgres dropdb --if-exists "${OTS_TESTDB}" >/dev/null 2>&1 || true
   fi
   rm -rf "${WORK}"
 }
@@ -118,8 +123,32 @@ case "${PORTAL_DB_BACKEND}" in
     echo "PASS: ${tables} tabellen gevonden"
     ;;
   postgresql|postgres)
-    echo "FAIL: portal PostgreSQL rehearsal is nog niet geïmplementeerd" >&2
-    exit 1
+    [[ -f "${WORK}/database/portal.dump" ]] || {
+      echo "FAIL: portal PostgreSQL backup ontbreekt" >&2
+      exit 1
+    }
+
+    sudo -u postgres createdb "${PORTAL_TESTDB}"
+    sudo -u postgres pg_restore \
+      --exit-on-error \
+      --no-owner \
+      --no-privileges \
+      --dbname="${PORTAL_TESTDB}" \
+      < "${WORK}/database/portal.dump"
+
+    PORTAL_TABLES="$(
+      sudo -u postgres psql \
+        --dbname="${PORTAL_TESTDB}" \
+        -Atc "SELECT COUNT(*) FROM pg_catalog.pg_tables WHERE schemaname='public';"
+    )"
+
+    [[ "${PORTAL_TABLES}" =~ ^[0-9]+$ && "${PORTAL_TABLES}" -gt 0 ]] || {
+      echo "FAIL: geen portal tabellen gevonden in testdatabase" >&2
+      exit 1
+    }
+
+    echo "PASS: portal PostgreSQL dump daadwerkelijk hersteld"
+    echo "PASS: ${PORTAL_TABLES} portal tabellen gevonden"
     ;;
   *)
     echo "FAIL: onbekende portal database backend: ${PORTAL_DB_BACKEND}" >&2
@@ -134,14 +163,21 @@ if [[ "${OTS_DB_BACKEND}" != "postgresql" && "${OTS_DB_BACKEND}" != "postgres" ]
   exit 1
 fi
 
-sudo -u postgres createdb "${TESTDB}"
+sudo -u postgres createdb "${OTS_TESTDB}"
 
 # WORK is intentionally root-only. Let the root shell open the archive and feed
 # it through stdin, so the postgres account never needs directory permissions.
-sudo -u postgres pg_restore   --exit-on-error   --no-owner   --no-privileges   --dbname="${TESTDB}"   < "${WORK}/database/ots.dump"
+sudo -u postgres pg_restore \
+  --exit-on-error \
+  --no-owner \
+  --no-privileges \
+  --dbname="${OTS_TESTDB}" \
+  < "${WORK}/database/ots.dump"
 
 OTS_TABLES="$(
-  sudo -u postgres psql     --dbname="${TESTDB}"     -Atc "SELECT COUNT(*) FROM pg_catalog.pg_tables WHERE schemaname='public';"
+  sudo -u postgres psql \
+    --dbname="${OTS_TESTDB}" \
+    -Atc "SELECT COUNT(*) FROM pg_catalog.pg_tables WHERE schemaname='public';"
 )"
 
 [[ "${OTS_TABLES}" =~ ^[0-9]+$ && "${OTS_TABLES}" -gt 0 ]] || {
