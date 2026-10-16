@@ -10,6 +10,7 @@ OTS_RUN_USER="${OTS_RUN_USER:-team3d}"
 OTS_HOME="${OTS_HOME:-/home/team3d}"
 OTS_DATA_FOLDER="${OTS_DATA_FOLDER:-/home/team3d/ots-1713}"
 ENV_FILE="${PORTAL_ENV_FILE:-${PORTAL_ROOT}/.env}"
+ENV_BACKUP_DIR="${PORTAL_ENV_BACKUP_DIR:-/var/backups/opentak-onboarding-portal}"
 VERIFY_AFTER_DEPLOY="${VERIFY_AFTER_DEPLOY:-1}"
 AIRSOFT_VERIFIER="${AIRSOFT_VERIFIER:-${PORTAL_ROOT}/scripts/installers/verify_3division_airsoft_stack.sh}"
 
@@ -47,7 +48,8 @@ set_env_value() {
 }
 
 timestamp="$(date +%Y%m%d%H%M%S)"
-cp -a "${ENV_FILE}" "${ENV_FILE}.bak.${timestamp}"
+install -d -o root -g root -m 0700 "${ENV_BACKUP_DIR}"
+install -o root -g root -m 0600 "${ENV_FILE}" "${ENV_BACKUP_DIR}/.env.bak.${timestamp}"
 
 # Permanent CO users send + receive in their own team.
 set_env_value "GAME_PERMANENT_USERS_RED" "CORood"
