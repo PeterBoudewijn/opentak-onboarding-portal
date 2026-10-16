@@ -4,9 +4,9 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
 import { settingsAPI, oidcAPI, magicLinkAPI } from '../services/api';
+import { portalAssetUrl } from '../utils/portalAssetUrl';
 import './Auth.css';
 
-const API_BASE_URL = window.location.origin;
 
 const safeInternalPath = (value) => {
   if (!value || !value.startsWith('/') || value.startsWith('//')) return null;
@@ -81,6 +81,7 @@ function Login() {
   const logoPath = logoEnabled && settings?.custom_logo_path
     ? settings.custom_logo_path
     : settings?.default_logo_path;
+  const resolvedLogoPath = portalAssetUrl(logoPath);
   const forgotPasswordEnabled = settings?.forgot_password_enabled !== false;
 
   // Magic link state
@@ -186,9 +187,9 @@ function Login() {
   return (
     <div className="auth-container">
       <div className="auth-card">
-        {logoPath && (
+        {resolvedLogoPath && (
           <div className="auth-logo">
-            <img src={logoPath} alt={brandName} />
+            <img src={resolvedLogoPath} alt={brandName} />
           </div>
         )}
         <h2>{brandName}</h2>
@@ -267,7 +268,7 @@ function Login() {
                 disabled={loading}
               >
                 {provider.icon_url && (
-                  <img src={`${API_BASE_URL}${provider.icon_url}`} alt="" style={{ width: 20, height: 20, objectFit: 'contain' }} />
+                  <img src={portalAssetUrl(provider.icon_url)} alt="" style={{ width: 20, height: 20, objectFit: 'contain' }} />
                 )}
                 {provider.display_name}
               </button>

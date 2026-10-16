@@ -3,10 +3,10 @@ import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { settingsAPI, oidcAPI, rolesAPI } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
+import { portalAssetUrl } from '../../utils/portalAssetUrl';
 import './Admin.css';
 import '../../components/AdminTable.css';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || window.location.origin;
 
 // Component for numeric settings (number input with save button)
 function NumericSettingItem({ setting, onSave, saving, formatSettingName, canEdit = true }) {
@@ -368,9 +368,9 @@ function LogoUploadSetting({ logoSettings, onUpload, onDelete, onDisplayModeChan
   };
 
   const currentLogo = logoSettings?.custom_logo_enabled && logoSettings?.custom_logo_path
-    ? `${API_BASE_URL}${logoSettings.custom_logo_path}`
+    ? portalAssetUrl(logoSettings.custom_logo_path)
     : logoSettings?.default_logo_path
-      ? `${API_BASE_URL}${logoSettings.default_logo_path}`
+      ? portalAssetUrl(logoSettings.default_logo_path)
       : null;
 
   return (
@@ -486,7 +486,7 @@ function OIDCProviderModal({ provider, roles, onSave, onClose, saving, error: ex
   // Compute the effective icon URL for preview
   const effectiveIconUrl = removeIcon && !iconFile
     ? null
-    : iconPreview || (provider?.icon_url ? `${API_BASE_URL}${provider.icon_url}` : null);
+    : iconPreview || (provider?.icon_url ? portalAssetUrl(provider.icon_url) : null);
 
   const handleIconFileSelect = (file) => {
     if (!file) return;
@@ -1278,7 +1278,7 @@ function Settings() {
                         }}
                       >
                         {provider.icon_url && (
-                          <img src={`${API_BASE_URL}${provider.icon_url}`} alt="" style={{ width: 16, height: 16, objectFit: 'contain' }} />
+                          <img src={portalAssetUrl(provider.icon_url)} alt="" style={{ width: 16, height: 16, objectFit: 'contain' }} />
                         )}
                         {provider.display_name}
                       </button>

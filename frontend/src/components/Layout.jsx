@@ -7,6 +7,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { settingsAPI, usersAPI } from '../services/api';
 import { useState, useEffect } from 'react';
 import AnnouncementsBadge from './AnnouncementsBadge';
+import { portalAssetUrl } from '../utils/portalAssetUrl';
 import './Layout.css';
 
 function Layout() {
@@ -33,8 +34,9 @@ function Layout() {
   const logoPath = logoEnabled && settings?.custom_logo_path
     ? settings.custom_logo_path
     : settings?.default_logo_path;
+  const resolvedLogoPath = portalAssetUrl(logoPath);
   const displayMode = settings?.logo_display_mode || 'logo_and_text';
-  const showLogo = logoPath && (displayMode === 'logo_only' || displayMode === 'logo_and_text');
+  const showLogo = resolvedLogoPath && (displayMode === 'logo_only' || displayMode === 'logo_and_text');
   const showText = displayMode === 'text_only' || displayMode === 'logo_and_text';
 
   useEffect(() => {
@@ -85,7 +87,7 @@ function Layout() {
         <div className="navbar-brand">
           <Link to="/dashboard">
             {showLogo && (
-              <img src={logoPath} alt={brandName} className="navbar-logo" />
+              <img src={resolvedLogoPath} alt={brandName} className="navbar-logo" />
             )}
             {showText && <span className="navbar-brand-text">{brandName}</span>}
           </Link>
