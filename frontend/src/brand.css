@@ -452,3 +452,356 @@ input[type="radio"] {
     height: 64px;
   }
 }
+
+
+/* -------------------------------------------------------------------------
+ * Final 3Division consistency pass
+ * ------------------------------------------------------------------------- */
+:root {
+  --primary-color: var(--brand-blue);
+  --accent-color: var(--brand-blue);
+}
+
+/* Generic action colors: normal actions use the 3Division palette.
+ * Success, warning and destructive actions keep their semantic colors. */
+.btn-primary,
+.btn-info,
+.kiosk-password-form .btn-primary,
+.kiosk-btn-program,
+.kiosk-retry-btn {
+  background-color: var(--brand-blue);
+  color: #ffffff;
+}
+
+.btn-primary:hover:not(:disabled),
+.btn-info:hover:not(:disabled),
+.kiosk-password-form .btn-primary:hover:not(:disabled),
+.kiosk-btn-program:hover:not(:disabled),
+.kiosk-retry-btn:hover:not(:disabled) {
+  background-color: var(--brand-blue-hover);
+}
+
+.btn-secondary,
+.kiosk-btn-validate {
+  background-color: var(--brand-steel);
+  color: #ffffff;
+}
+
+.btn-secondary:hover:not(:disabled),
+.kiosk-btn-validate:hover:not(:disabled) {
+  background-color: #405580;
+}
+
+.lang-btn.active {
+  background: var(--brand-blue);
+  border-color: var(--brand-blue);
+  color: #ffffff;
+}
+
+.links a,
+.cant-scan a,
+.auth-links a,
+.auth-footer a {
+  color: var(--brand-blue);
+}
+
+.download-btn,
+.refresh-btn,
+.open-btn,
+.workflow-btn,
+.next-step-btn {
+  border-radius: 9px;
+}
+
+.download-btn:hover,
+.refresh-btn:hover,
+.open-btn:hover,
+.workflow-btn:hover,
+.next-step-btn:hover {
+  filter: brightness(0.92);
+}
+
+.help-btn {
+  background: var(--brand-steel);
+  color: #ffffff;
+}
+
+.help-btn:hover {
+  background: #405580;
+}
+
+/* Legacy light-only panels are normalized to the active theme. */
+.announcements-panel,
+.announcement-modal,
+.approval-card,
+.api-keys-list,
+.api-docs-intro,
+.api-docs-sections,
+.pending-registrations-table-container,
+.modal,
+.modal-content,
+.file-browser,
+.claim-radio-container,
+.registration-success-card,
+.verify-email-card,
+.change-password-card {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+.panel-header,
+.panel-footer,
+.announcement-modal .modal-header,
+.announcement-modal .modal-footer,
+.approval-card-header,
+.approval-card-actions,
+.api-keys-info,
+.api-keys-table th,
+.api-docs-intro .auth-method,
+.api-docs-page .endpoint,
+.pending-registrations-table thead,
+.pending-registrations-stats,
+.file-browser-header,
+.file-browser-table thead th,
+.claim-radio-container .radio-info,
+.radio-details .detail,
+.user-info-card,
+.user-details {
+  background: var(--bg-table-header);
+  border-color: var(--border-color);
+}
+
+.announcement-item,
+.announcement-modal .modal-body,
+.approvals-header h1,
+.approval-card .user-info h3,
+.approval-card .detail-row .value,
+.api-keys-table th,
+.api-keys-table td,
+.key-name strong,
+.permission-label strong,
+.api-docs-intro h2,
+.api-docs-intro h3,
+.api-docs-sections > h2,
+.api-docs-page .section-header h3,
+.api-docs-page .path,
+.api-docs-page .endpoint-auth strong,
+.api-docs-page .endpoint-params strong,
+.api-docs-page .endpoint-body strong,
+.api-docs-page .endpoint-response strong,
+.pending-registrations-header h1,
+.pending-registrations-table th,
+.pending-registrations-stats strong,
+.file-name,
+.claim-radio-container h1,
+.claim-radio-container .radio-info h2,
+.registration-success-card h1,
+.verify-email-card h1,
+.user-details p,
+.change-password-card h1 {
+  color: var(--text-primary);
+}
+
+.panel-header button,
+.announcement-item .date,
+.dismiss-btn,
+.no-announcements,
+.announcement-modal .modal-footer .date,
+.loading,
+.not-approver-message h2,
+.not-approver-message p,
+.no-approvals p,
+.approvals-count,
+.approval-card .user-info .username,
+.approval-card .detail-row .label,
+.api-keys-info p,
+.key-description,
+.permission-count,
+.empty-state,
+.permission-description,
+.api-docs-intro p,
+.api-docs-page .auth-method p,
+.api-docs-page .toggle-icon,
+.api-docs-page .section-description,
+.api-docs-page .endpoint-description,
+.api-docs-page .endpoint-auth,
+.approval-info small,
+.no-data,
+.no-data .hint,
+.pending-registrations-stats,
+.file-browser-breadcrumb,
+.file-browser-table thead th,
+.file-path,
+.empty-message,
+.claim-description,
+.redirect-text,
+.success-message,
+.verify-status p,
+.field-hint {
+  color: var(--text-secondary);
+}
+
+.announcement-item:hover,
+.api-keys-table tr:hover,
+.pending-registrations-table tbody tr:hover,
+.file-browser-table tbody .file-row:hover,
+.permission-checkbox:hover {
+  background: var(--bg-card-hover);
+}
+
+.announcement-item.unread,
+.announcement-card.unread {
+  background: rgba(47, 102, 245, 0.10);
+}
+
+.announcement-card.unread {
+  border-left-color: var(--brand-blue);
+}
+
+.approver-badge,
+.role-badge {
+  background-color: rgba(47, 102, 245, 0.14);
+  color: #7ea0ff;
+  border-color: rgba(94, 128, 220, 0.28);
+}
+
+.api-keys-info,
+.api-docs-page .base-url {
+  border-left-color: var(--brand-blue);
+}
+
+.api-docs-page .base-url,
+.api-docs-page .auth-method,
+.api-docs-page .endpoint,
+.api-docs-page .path,
+.key-prefix,
+.key-value-container,
+.key-value {
+  background: var(--bg-table-header);
+  color: var(--text-primary);
+}
+
+.api-docs-page .api-section,
+.api-docs-page .api-docs-sections > h2,
+.api-docs-page .section-description,
+.api-keys-table th,
+.api-keys-table td,
+.pending-registrations-table th,
+.pending-registrations-table td,
+.file-browser,
+.file-browser-header,
+.file-browser-search,
+.file-browser-table thead th,
+.file-browser-table tbody td {
+  border-color: var(--border-color);
+}
+
+.pending-registrations-table-container,
+.api-keys-list,
+.api-docs-intro,
+.api-docs-sections,
+.file-browser {
+  box-shadow: var(--brand-shadow);
+}
+
+.pending-registrations-table tbody tr.expired-row,
+.approval-card.expired {
+  background: rgba(211, 74, 74, 0.08);
+}
+
+.file-browser-search {
+  background: var(--bg-card);
+}
+
+.file-browser-search input {
+  color: var(--text-primary);
+}
+
+.file-browser-search input::placeholder {
+  color: var(--text-muted);
+}
+
+.file-browser-table tbody .file-row.selectable:hover {
+  background: rgba(47, 102, 245, 0.10);
+}
+
+.file-browser-table tbody .file-row.selected {
+  background: rgba(47, 102, 245, 0.18);
+}
+
+.file-row.selectable .file-name {
+  color: #7ea0ff;
+}
+
+.file-browser-close:hover {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.file-browser-content::-webkit-scrollbar-track {
+  background: var(--bg-table-header);
+}
+
+.file-browser-content::-webkit-scrollbar-thumb {
+  background: var(--brand-steel);
+}
+
+.claim-radio-page,
+.registration-success-container,
+.verify-email-container {
+  background: var(--bg-page);
+}
+
+.claim-radio-container,
+.registration-success-card,
+.verify-email-card,
+.change-password-card {
+  border-radius: var(--brand-radius);
+  box-shadow: var(--brand-shadow);
+}
+
+.pending-registrations-table-container .form-group input,
+.pending-registrations-table-container .form-group select,
+.modal .form-group input,
+.modal .form-group select,
+.modal .form-group textarea,
+.modal-content .form-group input,
+.modal-content .form-group select,
+.modal-content .form-group textarea {
+  background: var(--bg-input);
+  color: var(--text-primary);
+  border-color: var(--border-input);
+}
+
+.pending-registrations-table-container .form-group select option,
+.modal .form-group select option,
+.modal-content .form-group select option {
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+
+.kiosk-section {
+  border: 1px solid var(--border-color);
+  box-shadow: var(--brand-shadow);
+}
+
+.kiosk-spinner,
+.spinner {
+  border-top-color: var(--brand-blue);
+}
+
+.kiosk-header-logo,
+.kiosk-logo {
+  filter: none;
+}
+
+/* Keep code/log panes dark and neutral, matching the logo background. */
+.api-docs-page pre,
+.config-code-block,
+.program-log,
+.serial-log {
+  border: 1px solid #2d3650;
+  background: #10131f;
+  color: #d9dce4;
+}

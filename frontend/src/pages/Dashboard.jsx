@@ -214,8 +214,8 @@ function Dashboard() {
   const getItakIconURL = () => `${API_BASE_URL}/static/img/itak.jpg`;
 
   const brandName = settings?.brand_name || 'My OTS Portal';
-  const primaryColor = settings?.primary_color || '#000000';
-  const accentColor = settings?.accent_color || '#ff9800';
+  const primaryColor = settings?.primary_color || '#34446c';
+  const accentColor = settings?.accent_color || '#2f66f5';
   const hasAnyQRCode = settings?.generate_atak_qr_code || settings?.generate_itak_qr_code;
 
   const getCallsignQRUrl = () => {
@@ -430,7 +430,7 @@ function Dashboard() {
                 <td>{profile.description || t('dashboard.takProfile')}</td>
                 <td>
                   {settings?.open_in_atak_enabled && (
-                    <button className="download-btn" onClick={() => handleOpenInAtak(profile.id)} style={{ background: '#4CAF50' }}>{t('dashboard.openInAtak')}</button>
+                    <button className="download-btn" onClick={() => handleOpenInAtak(profile.id)} style={{ background: accentColor }}>{t('dashboard.openInAtak')}</button>
                   )}
                   <button className="download-btn" onClick={() => handleDownloadProfile(profile.id)} style={{ background: accentColor }}>{t('common.download')}</button>
                 </td>
@@ -450,15 +450,15 @@ function Dashboard() {
       title: t('dashboard.meshtasticChannelGroups'),
       content: (
         <>
-          <p style={{ color: '#666', marginBottom: '1rem' }}>{t('dashboard.scanToConfigureChannels')}</p>
+          <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem' }}>{t('dashboard.scanToConfigureChannels')}</p>
           <div className="meshtastic-grid" style={{ justifyContent: 'center' }}>
             {groupsWithChannels.map((group) => {
               const slotMap = {};
               (Array.isArray(group.channels) ? group.channels : []).forEach(c => { slotMap[c.slot_number] = c.name; });
               return (
-                <div key={group.id} style={{ flex: '1 1 calc(50% - 1rem)', minWidth: '420px', maxWidth: '520px', padding: '1.5rem', background: '#fff', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+                <div key={group.id} style={{ flex: '1 1 calc(50% - 1rem)', minWidth: '420px', maxWidth: '520px', padding: '1.5rem', background: 'var(--bg-card)', borderRadius: '8px', boxShadow: '0 1px 3px var(--shadow-sm)' }}>
                   <h3>{group.name}</h3>
-                  {group.description && <p style={{ color: '#666' }}>{group.description}</p>}
+                  {group.description && <p style={{ color: 'var(--text-secondary)' }}>{group.description}</p>}
                   {group.combined_url ? (
                     <>
                       <div style={{ display: 'flex', alignItems: 'flex-start', gap: '2rem', margin: '1rem 0' }}>
@@ -466,7 +466,7 @@ function Dashboard() {
                           <QRCodeSVG value={group.combined_url} size={300} level="H" className="qr-code" imageSettings={{ src: `${API_BASE_URL}/static/img/meshtastic.png`, height: 50, width: 50, excavate: true }} />
                         </div>
                         <div style={{ padding: '1rem 0', minWidth: '180px' }}>
-                          <p style={{ margin: '0 0 1rem', fontSize: '1.1rem', color: '#333', fontWeight: 600 }}>{t('dashboard.slot')}:</p>
+                          <p style={{ margin: '0 0 1rem', fontSize: '1.1rem', color: 'var(--text-primary)', fontWeight: 600 }}>{t('dashboard.slot')}:</p>
                           {[0, 1, 2, 3, 4, 5, 6, 7].map(slot => (
                             <p key={slot} style={{ margin: '0.5rem 0', fontSize: '1.1rem', color: slotMap[slot] ? '#333' : '#999' }}>
                               {slot}: {slotMap[slot] ? <strong>{slotMap[slot]}</strong> : <em>{t('dashboard.unused')}</em>}
@@ -481,7 +481,7 @@ function Dashboard() {
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                       {(Array.isArray(group.channels) ? group.channels : []).filter(c => c.url).map((channel) => (
-                        <div key={channel.id} style={{ textAlign: 'center', padding: '0.5rem', background: '#f9f9f9', borderRadius: '4px' }}>
+                        <div key={channel.id} style={{ textAlign: 'center', padding: '0.5rem', background: 'var(--bg-table-header)', borderRadius: '4px' }}>
                           <p style={{ margin: '0 0 0.5rem', fontWeight: 500, fontSize: '0.9rem' }}>{t('dashboard.slot')} {channel.slot_number}: {channel.name}</p>
                           <div className="qr-section">
                             <QRCodeSVG value={channel.url} size={150} level="H" className="qr-code" imageSettings={{ src: `${API_BASE_URL}/static/img/meshtastic.png`, height: 30, width: 30, excavate: true }} />
@@ -524,9 +524,9 @@ function Dashboard() {
                   <div className="qr-actions" style={{ marginTop: '1rem' }}>
                     <button onClick={() => window.location.href = config.url} className="open-btn" style={{ background: accentColor }}>{t('dashboard.openInMeshtastic')}</button>
                   </div>
-                  <p style={{ fontSize: '0.9rem', color: '#666', marginTop: '0.75rem' }}>
+                  <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginTop: '0.75rem' }}>
                     {t('dashboard.cantScan')}{' '}
-                    <button onClick={() => handleCopyMeshtasticLink(config.url, config.id)} style={{ background: 'none', border: 'none', color: copiedMeshtastic === config.id ? '#28a745' : '#007bff', textDecoration: 'underline', cursor: 'pointer', padding: 0, font: 'inherit', fontWeight: 500 }}>
+                    <button onClick={() => handleCopyMeshtasticLink(config.url, config.id)} style={{ background: 'none', border: 'none', color: copiedMeshtastic === config.id ? '#28a745' : 'var(--brand-blue)', textDecoration: 'underline', cursor: 'pointer', padding: 0, font: 'inherit', fontWeight: 500 }}>
                       {copiedMeshtastic === config.id ? t('common.copied') : t('dashboard.copyLink')}
                     </button>
                   </p>
@@ -584,7 +584,7 @@ function Dashboard() {
               ))}
             </div>
           ) : (
-            <p style={{ color: '#666', marginBottom: '1rem' }}>{t('dashboard.noRadiosAssigned')}</p>
+            <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem' }}>{t('dashboard.noRadiosAssigned')}</p>
           )}
           {settings?.user_radio_enrollment_enabled && (
             <button

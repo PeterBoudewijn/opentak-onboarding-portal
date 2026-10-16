@@ -235,7 +235,7 @@ function ColorSettingItem({ setting, onSave, saving, formatSettingName, canEdit 
             setLocalValue(e.target.value);
             setIsEditing(true);
           }}
-          placeholder="#ff9800"
+          placeholder="#2f66f5"
           disabled={saving || !canEdit}
           className="color-text"
         />
@@ -687,7 +687,7 @@ function OIDCProviderModal({ provider, roles, onSave, onClose, saving, error: ex
                 <label>{t('admin.settings.buttonIcon')}</label>
                 {effectiveIconUrl && (
                   <div style={{ marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <img src={effectiveIconUrl} alt={t('admin.settings.buttonPreview')} style={{ width: 32, height: 32, objectFit: 'contain', background: '#f0f0f0', borderRadius: 4, padding: 2 }} />
+                    <img src={effectiveIconUrl} alt={t('admin.settings.buttonPreview')} style={{ width: 32, height: 32, objectFit: 'contain', background: 'var(--bg-table-header)', borderRadius: 4, padding: 2 }} />
                     <button type="button" className="btn-cancel-setting" onClick={handleRemoveIconClick} style={{ fontSize: '0.8rem' }}>
                       {t('common.remove')}
                     </button>
@@ -760,11 +760,11 @@ function OIDCProviderModal({ provider, roles, onSave, onClose, saving, error: ex
                     {t('admin.settings.addMapping')}
                   </button>
                 </div>
-                <small style={{ color: '#666', display: 'block', marginBottom: '0.75rem' }}>
+                <small style={{ color: 'var(--text-secondary)', display: 'block', marginBottom: '0.75rem' }}>
                   {t('admin.settings.roleMappingsHelp')}
                 </small>
                 {Object.keys(formData.role_mappings).length === 0 ? (
-                  <p style={{ color: '#999', fontSize: '0.9rem', fontStyle: 'italic' }}>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', fontStyle: 'italic' }}>
                     {t('admin.settings.noMappings')}
                   </p>
                 ) : (
@@ -1246,7 +1246,7 @@ function Settings() {
           </div>
 
           {oidcProviders.length === 0 ? (
-            <p style={{ color: '#666', fontStyle: 'italic' }}>
+            <p style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>
               {t('admin.settings.noOidcProviders')}
             </p>
           ) : (

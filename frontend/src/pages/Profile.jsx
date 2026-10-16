@@ -55,7 +55,7 @@ function Profile() {
       {error && <div className="alert alert-error">{error}</div>}
       {success && <div className="alert alert-success">{success}</div>}
 
-      <div style={{ background: 'white', padding: '2rem', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', marginTop: '2rem' }}>
+      <div style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', padding: '2rem', border: '1px solid var(--border-color)', borderRadius: '14px', boxShadow: 'var(--brand-shadow)', marginTop: '2rem' }}>
         {!editing ? (
           <>
             <div style={{ marginBottom: '1rem' }}>
@@ -86,7 +86,7 @@ function Profile() {
                     style={{
                       display: 'inline-block',
                       padding: '0.25rem 0.75rem',
-                      backgroundColor: '#333',
+                      backgroundColor: 'var(--brand-steel)',
                       color: '#fff',
                       borderRadius: '1rem',
                       fontSize: '0.875rem',
@@ -101,7 +101,7 @@ function Profile() {
 
             <button
               onClick={() => setEditing(true)}
-              style={{ padding: '0.5rem 1rem', background: '#f57c00', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+              style={{ padding: '0.5rem 1rem', background: 'var(--brand-blue)', color: 'white', border: 'none', borderRadius: '9px', cursor: 'pointer' }}
             >
               {t('profile.editButton')}
             </button>
@@ -166,7 +166,7 @@ function Profile() {
               <button
                 type="submit"
                 disabled={loading}
-                style={{ padding: '0.5rem 1rem', background: '#28a745', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                style={{ padding: '0.5rem 1rem', background: 'var(--brand-blue)', color: 'white', border: 'none', borderRadius: '9px', cursor: 'pointer' }}
               >
                 {loading ? t('common.saving') : t('profile.saveChanges')}
               </button>
@@ -177,7 +177,7 @@ function Profile() {
                   setError('');
                   setSuccess('');
                 }}
-                style={{ padding: '0.5rem 1rem', background: '#6c757d', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                style={{ padding: '0.5rem 1rem', background: 'var(--brand-steel)', color: 'white', border: 'none', borderRadius: '9px', cursor: 'pointer' }}
               >
                 {t('common.cancel')}
               </button>
