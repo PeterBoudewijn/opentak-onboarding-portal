@@ -2,12 +2,28 @@ from sqlalchemy import Integer, Table, Column, ForeignKey, DateTime, String, Tex
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
+from flask import current_app
+from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy.exc import IntegrityError
 import datetime
 # import datetime
 
 db = SQLAlchemy()
 migrate = Migrate()
+
+PENDING_PASSWORD_PREFIX = "enc:v1:"
+
+
+def _pending_registration_fernet():
+    key = current_app.config.get("PENDING_REGISTRATION_ENCRYPTION_KEY")
+    if not key:
+        raise RuntimeError("PENDING_REGISTRATION_ENCRYPTION_KEY is not configured")
+
+    try:
+        key_bytes = key.encode("ascii") if isinstance(key, str) else key
+        return Fernet(key_bytes)
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("PENDING_REGISTRATION_ENCRYPTION_KEY is invalid") from exc
 
 # Define the association table for the many-to-many relationship
 role_onboardingcode_association = Table(
@@ -991,7 +1007,7 @@ class PendingRegistrationModel(db.Model):
     id: Mapped[int] = mapped_column(primary_key=True)
     username: Mapped[str] = mapped_column(unique=True, nullable=False)
     email: Mapped[str] = mapped_column(unique=True, nullable=False)
-    password: Mapped[str] = mapped_column(nullable=False)  # Store temporarily for OTS creation
+    _password: Mapped[str] = mapped_column("password", nullable=False)
     firstName: Mapped[str] = mapped_column(nullable=True)
     lastName: Mapped[str] = mapped_column(nullable=True)
     callsign: Mapped[str] = mapped_column(nullable=True)
@@ -1009,6 +1025,28 @@ class PendingRegistrationModel(db.Model):
 
     onboarding_code = relationship("OnboardingCodeModel")
     approver = relationship("UserModel", foreign_keys=[approved_by])
+
+    @property
+    def password(self):
+        stored = self._password
+        if stored is None:
+            return None
+        if not stored.startswith(PENDING_PASSWORD_PREFIX):
+            raise RuntimeError("Pending registration password is not encrypted")
+
+        token = stored[len(PENDING_PASSWORD_PREFIX):]
+        try:
+            return _pending_registration_fernet().decrypt(token.encode("ascii")).decode("utf-8")
+        except (InvalidToken, UnicodeDecodeError) as exc:
+            raise RuntimeError("Pending registration password cannot be decrypted") from exc
+
+    @password.setter
+    def password(self, value):
+        if not isinstance(value, str) or not value:
+            raise ValueError("Pending registration password must be a non-empty string")
+
+        token = _pending_registration_fernet().encrypt(value.encode("utf-8")).decode("ascii")
+        self._password = PENDING_PASSWORD_PREFIX + token
 
     @staticmethod
     def create_pending_registration(username, email, password, first_name, last_name, callsign, onboarding_code_id, verification_token, expires_at):

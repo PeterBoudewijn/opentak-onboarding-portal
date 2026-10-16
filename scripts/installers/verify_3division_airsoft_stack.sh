@@ -147,6 +147,26 @@ else
   warn ".env permissions are ${env_mode:-unknown}; verify only the portal service account can read it"
 fi
 
+if sudo -u "${PORTAL_USER}" env \
+  HOME="${PORTAL_ROOT}" \
+  DOTENV_PATH="${ENV_FILE}" \
+  "${PORTAL_ROOT}/venv/bin/python" - <<'PY' >/dev/null 2>&1
+from cryptography.fernet import Fernet
+from dotenv import load_dotenv
+import os
+
+load_dotenv(os.environ["DOTENV_PATH"])
+key = os.environ.get("PENDING_REGISTRATION_ENCRYPTION_KEY")
+if not key:
+    raise SystemExit(1)
+Fernet(key.encode("ascii"))
+PY
+then
+  pass "pending registration encryption key configured"
+else
+  fail "pending registration encryption key missing or invalid"
+fi
+
 section "PORTAL PYTHON"
 PORTAL_PYTHON="${PORTAL_ROOT}/venv/bin/python"
 if sudo -u "${PORTAL_USER}" env HOME="${PORTAL_ROOT}" "${PORTAL_PYTHON}" -m py_compile   "${PORTAL_ROOT}/app/__init__.py"   "${PORTAL_ROOT}/app/settings.py"   "${PORTAL_ROOT}/app/ots.py"   "${PORTAL_ROOT}/app/api_v1/__init__.py"   "${PORTAL_ROOT}/app/api_v1/game.py"   "${PORTAL_ROOT}/app/api_v1/announcements.py"; then
@@ -174,6 +194,36 @@ if grep -Fq 'Content-Security-Policy' "${APP_INIT}"   && grep -Fq 'Strict-Transp
 else
   fail "portal security-header code missing"
 fi
+
+MODELS_PY="${PORTAL_ROOT}/app/models.py"
+check_marker "${MODELS_PY}" 'PENDING_PASSWORD_PREFIX = "enc:v1:"' "pending registration password encryption code"
+
+PENDING_PASSWORD_OUT="$(mktemp)"
+if sudo -u "${PORTAL_USER}" env \
+  HOME="${PORTAL_ROOT}" \
+  TESTING=True \
+  DOTENV_PATH="${ENV_FILE}" \
+  PYTHONPATH="${PORTAL_ROOT}" \
+  "${PORTAL_PYTHON}" - <<'PY' >"${PENDING_PASSWORD_OUT}" 2>&1
+from app import app
+from app.models import PendingRegistrationModel, PENDING_PASSWORD_PREFIX
+
+with app.app_context():
+    bad = sum(
+        1
+        for row in PendingRegistrationModel.query.all()
+        if not row._password or not row._password.startswith(PENDING_PASSWORD_PREFIX)
+    )
+
+raise SystemExit(1 if bad else 0)
+PY
+then
+  pass "pending registration passwords encrypted at rest"
+else
+  fail "unencrypted pending registration password detected or check failed"
+  sed -n '1,20p' "${PENDING_PASSWORD_OUT}"
+fi
+rm -f "${PENDING_PASSWORD_OUT}"
 
 section "FRONTEND SOURCE"
 FRONTEND_SRC="${PORTAL_ROOT}/frontend/src"

@@ -147,3 +147,40 @@ class TestAuthRegister:
         assert response.status_code == 400
         data = response.get_json()
         assert 'error' in data
+
+
+class TestPendingRegistrationPasswordEncryption:
+    """Test encryption of temporary pending-registration passwords."""
+
+    def test_password_is_encrypted_at_rest_and_decrypts_for_ots(self, app):
+        from datetime import datetime, timedelta
+        from app.models import PendingRegistrationModel, PENDING_PASSWORD_PREFIX
+
+        plaintext = 'TemporaryPassword-123!'
+
+        with app.app_context():
+            pending = PendingRegistrationModel(
+                username='pendingcrypto',
+                email='pendingcrypto@example.com',
+                password=plaintext,
+                firstName='Pending',
+                lastName='Crypto',
+                callsign='CRYPT',
+                onboarding_code_id=1,
+                verification_token='pending-crypto-token',
+                expires_at=datetime.now() + timedelta(hours=1),
+            )
+
+            assert pending._password.startswith(PENDING_PASSWORD_PREFIX)
+            assert plaintext not in pending._password
+            assert pending.password == plaintext
+
+    def test_unencrypted_legacy_value_is_rejected(self, app):
+        from app.models import PendingRegistrationModel
+
+        with app.app_context():
+            pending = PendingRegistrationModel()
+            pending._password = 'legacy-plaintext-password'
+
+            with pytest.raises(RuntimeError, match='not encrypted'):
+                _ = pending.password

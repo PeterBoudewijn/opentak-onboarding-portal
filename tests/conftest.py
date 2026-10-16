@@ -4,6 +4,7 @@ Pytest configuration and fixtures
 import pytest
 import os
 import sys
+from cryptography.fernet import Fernet
 
 # Add parent directory to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -16,6 +17,7 @@ os.environ['ENABLE_API'] = 'True'
 os.environ['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
 os.environ['SECRET_KEY'] = 'test-secret-key-at-least-32-bytes-long'
 os.environ['JWT_SECRET_KEY'] = 'test-jwt-secret-at-least-32-bytes-long'
+os.environ['PENDING_REGISTRATION_ENCRYPTION_KEY'] = Fernet.generate_key().decode('ascii')
 os.environ['OTS_URL'] = 'http://localhost:8080'
 os.environ['OTS_USERNAME'] = 'test'
 os.environ['OTS_PASSWORD'] = 'test'
@@ -38,6 +40,7 @@ def app():
     os.environ['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
     os.environ['SECRET_KEY'] = 'test-secret-key-at-least-32-bytes-long'
     os.environ['JWT_SECRET_KEY'] = 'test-jwt-secret-at-least-32-bytes-long'
+    os.environ['PENDING_REGISTRATION_ENCRYPTION_KEY'] = Fernet.generate_key().decode('ascii')
     os.environ['OTS_URL'] = 'http://localhost:8080'
     os.environ['OTS_USERNAME'] = 'test'
     os.environ['OTS_PASSWORD'] = 'test'
