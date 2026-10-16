@@ -47,14 +47,30 @@ def get_settings():
 
     # Get enabled/value pairs for configurable settings
     brand_name_enabled = get_bool_setting('brand_name_enabled', True)
-    brand_name_value = get_str_setting('brand_name_value', 'My OTS Portal')
+    brand_name_value = get_str_setting('brand_name_value', '3Division TAK Portal')
+    if str(brand_name_value).strip() in {
+        '',
+        'My OTS Portal',
+        'OpenTAK Portal',
+        'OpenTAK Onboarding Portal',
+    }:
+        brand_name_value = '3Division TAK Portal'
+
+    primary_color = str(get_str_setting('primary_color', '#34446c') or '#34446c').strip()
+    if primary_color.lower() == '#000000':
+        primary_color = '#34446c'
+
+    accent_color = str(get_str_setting('accent_color', '#2f66f5') or '#2f66f5').strip()
+    if accent_color.lower() == '#ff9800':
+        accent_color = '#2f66f5'
 
     settings = {
         # Brand name - only show if enabled
-        'brand_name': brand_name_value if brand_name_enabled else 'My OTS Portal',
-        # Theme colors from database
-        'primary_color': get_str_setting('primary_color', '#000000'),
-        'accent_color': get_str_setting('accent_color', '#ff9800'),
+        'brand_name': brand_name_value if brand_name_enabled else '3Division TAK Portal',
+        # Theme colors from database. Legacy defaults are upgraded in-memory
+        # without overwriting an administrator's custom values.
+        'primary_color': primary_color,
+        'accent_color': accent_color,
         'logo_path': '/static/img/logo.png',  # Default logo path
         'generate_atak_qr_code': get_bool_setting('generate_atak_qr_code', True),
         'generate_itak_qr_code': get_bool_setting('generate_itak_qr_code', True),
@@ -95,7 +111,7 @@ def get_settings():
         # Magic Link
         'magic_link_login_enabled': get_bool_setting('magic_link_login_enabled', False),
         # Theme
-        'default_theme': get_str_setting('default_theme', 'light'),
+        'default_theme': get_str_setting('default_theme', 'dark'),
         'kiosk_default_theme': get_str_setting('kiosk_default_theme', 'dark'),
         # Help
         'help_link_enabled': get_bool_setting('help_link_enabled', False),

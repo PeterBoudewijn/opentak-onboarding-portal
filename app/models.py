@@ -1464,7 +1464,7 @@ class SystemSettingsModel(db.Model):
             },
             {
                 'key': 'brand_name_value',
-                'value': 'My OTS Portal',
+                'value': '3Division TAK Portal',
                 'category': 'general',
                 'description': 'Portal name displayed in the header'
             },
@@ -1666,19 +1666,19 @@ class SystemSettingsModel(db.Model):
             },
             {
                 'key': 'logo_display_mode',
-                'value': 'logo_and_text',
+                'value': 'logo_only',
                 'category': 'branding',
                 'description': 'How to display logo and brand name (logo_only, text_only, logo_and_text)'
             },
             {
                 'key': 'primary_color',
-                'value': '#000000',
+                'value': '#34446c',
                 'category': 'branding',
                 'description': 'Primary color for the portal theme'
             },
             {
                 'key': 'accent_color',
-                'value': '#ff9800',
+                'value': '#2f66f5',
                 'category': 'branding',
                 'description': 'Accent color for buttons and highlights'
             },
@@ -1711,7 +1711,7 @@ class SystemSettingsModel(db.Model):
             # Appearance / Theme
             {
                 'key': 'default_theme',
-                'value': 'light',
+                'value': 'dark',
                 'category': 'appearance',
                 'description': 'Default theme for the portal (light or dark)'
             },

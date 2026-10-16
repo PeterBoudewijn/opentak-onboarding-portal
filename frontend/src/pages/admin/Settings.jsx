@@ -418,7 +418,7 @@ function LogoUploadSetting({ logoSettings, onUpload, onDelete, onDisplayModeChan
         <div className="logo-display-mode">
           <label>{t('admin.settings.displayMode')}:</label>
           <select
-            value={logoSettings?.logo_display_mode || 'logo_and_text'}
+            value={logoSettings?.logo_display_mode || 'logo_only'}
             onChange={(e) => onDisplayModeChange(e.target.value)}
             disabled={saving || !canEdit}
           >

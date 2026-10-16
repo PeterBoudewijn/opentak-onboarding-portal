@@ -245,7 +245,7 @@ def get_logo_settings():
     return jsonify({
         'custom_logo_enabled': custom_logo_enabled,
         'custom_logo_path': SystemSettingsModel.get_setting('custom_logo_path') or '',
-        'logo_display_mode': SystemSettingsModel.get_setting('logo_display_mode') or 'logo_and_text',
+        'logo_display_mode': SystemSettingsModel.get_setting('logo_display_mode') or 'logo_only',
         'default_logo_path': '/static/img/logo.png'
     }), 200
 
