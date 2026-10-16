@@ -40,6 +40,7 @@ UPDATES_UPLOAD_FOLDER = str(environ.get('UPDATES_UPLOAD_FOLDER', 'updates'))
 
 JWT_SECRET_KEY = str(environ.get('JWT_SECRET_KEY', secrets.token_hex(32)))
 PENDING_REGISTRATION_ENCRYPTION_KEY = str(environ.get('PENDING_REGISTRATION_ENCRYPTION_KEY', ''))
+OIDC_CLIENT_SECRET_ENCRYPTION_KEY = str(environ.get('OIDC_CLIENT_SECRET_ENCRYPTION_KEY', ''))
 # Allow JWT identity to be any JSON-serializable type (not just string)
 JWT_IDENTITY_CLAIM = 'sub'
 JWT_ALGORITHM = 'HS256'

@@ -167,6 +167,26 @@ else
   fail "pending registration encryption key missing or invalid"
 fi
 
+if sudo -u "${PORTAL_USER}" env \
+  HOME="${PORTAL_ROOT}" \
+  DOTENV_PATH="${ENV_FILE}" \
+  "${PORTAL_ROOT}/venv/bin/python" - <<'PY' >/dev/null 2>&1
+from cryptography.fernet import Fernet
+from dotenv import load_dotenv
+import os
+
+load_dotenv(os.environ["DOTENV_PATH"])
+key = os.environ.get("OIDC_CLIENT_SECRET_ENCRYPTION_KEY")
+if not key:
+    raise SystemExit(1)
+Fernet(key.encode("ascii"))
+PY
+then
+  pass "OIDC client secret encryption key configured"
+else
+  fail "OIDC client secret encryption key missing or invalid"
+fi
+
 section "PORTAL PYTHON"
 PORTAL_PYTHON="${PORTAL_ROOT}/venv/bin/python"
 if sudo -u "${PORTAL_USER}" env HOME="${PORTAL_ROOT}" "${PORTAL_PYTHON}" -m py_compile   "${PORTAL_ROOT}/app/__init__.py"   "${PORTAL_ROOT}/app/settings.py"   "${PORTAL_ROOT}/app/ots.py"   "${PORTAL_ROOT}/app/api_v1/__init__.py"   "${PORTAL_ROOT}/app/api_v1/game.py"   "${PORTAL_ROOT}/app/api_v1/announcements.py"   "${PORTAL_ROOT}/app/api_v1/oidc.py"; then
@@ -205,6 +225,7 @@ fi
 
 MODELS_PY="${PORTAL_ROOT}/app/models.py"
 check_marker "${MODELS_PY}" 'PENDING_PASSWORD_PREFIX = "enc:v1:"' "pending registration password encryption code"
+check_marker "${MODELS_PY}" 'OIDC_CLIENT_SECRET_PREFIX = "enc:v1:"' "OIDC client secret encryption code"
 
 PENDING_PASSWORD_OUT="$(mktemp)"
 if sudo -u "${PORTAL_USER}" env \
@@ -232,6 +253,34 @@ else
   sed -n '1,20p' "${PENDING_PASSWORD_OUT}"
 fi
 rm -f "${PENDING_PASSWORD_OUT}"
+
+OIDC_SECRET_OUT="$(mktemp)"
+if sudo -u "${PORTAL_USER}" env \
+  HOME="${PORTAL_ROOT}" \
+  TESTING=True \
+  DOTENV_PATH="${ENV_FILE}" \
+  PYTHONPATH="${PORTAL_ROOT}" \
+  "${PORTAL_PYTHON}" - <<'PY' >"${OIDC_SECRET_OUT}" 2>&1
+from app import app
+from app.models import OIDCProviderModel, OIDC_CLIENT_SECRET_PREFIX
+
+with app.app_context():
+    bad = sum(
+        1
+        for row in OIDCProviderModel.query.all()
+        if not row._client_secret
+        or not row._client_secret.startswith(OIDC_CLIENT_SECRET_PREFIX)
+    )
+
+raise SystemExit(1 if bad else 0)
+PY
+then
+  pass "OIDC client secrets encrypted at rest"
+else
+  fail "unencrypted OIDC client secret detected or check failed"
+  sed -n '1,20p' "${OIDC_SECRET_OUT}"
+fi
+rm -f "${OIDC_SECRET_OUT}"
 
 OIDC_PY="${PORTAL_ROOT}/app/api_v1/oidc.py"
 LOGIN_JSX="${PORTAL_ROOT}/frontend/src/pages/Login.jsx"

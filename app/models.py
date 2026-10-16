@@ -12,6 +12,19 @@ db = SQLAlchemy()
 migrate = Migrate()
 
 PENDING_PASSWORD_PREFIX = "enc:v1:"
+OIDC_CLIENT_SECRET_PREFIX = "enc:v1:"
+
+
+def _oidc_client_secret_fernet():
+    key = current_app.config.get("OIDC_CLIENT_SECRET_ENCRYPTION_KEY")
+    if not key:
+        raise RuntimeError("OIDC_CLIENT_SECRET_ENCRYPTION_KEY is not configured")
+
+    try:
+        key_bytes = key.encode("ascii") if isinstance(key, str) else key
+        return Fernet(key_bytes)
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("OIDC_CLIENT_SECRET_ENCRYPTION_KEY is invalid") from exc
 
 
 def _pending_registration_fernet():
@@ -1278,13 +1291,39 @@ class OIDCProviderModel(db.Model):
     icon_url = Column(String(500), nullable=True)                        # Optional icon/logo URL for the login button
     discovery_url = Column(String(500), nullable=False)                  # OIDC discovery endpoint (.well-known/openid-configuration)
     client_id = Column(String(500), nullable=False)
-    client_secret = Column(String(500), nullable=False)
+    _client_secret = Column("client_secret", String(500), nullable=False)
     enabled = Column(Boolean, default=True)
     role_claim = Column(String(100), default='roles')                    # JSON path in id_token for roles (e.g., "roles", "realm_access.roles")
     sync_roles = Column(Boolean, default=True)                           # Whether to sync roles from OIDC claims
     role_mappings = Column(Text, default='{}')                           # JSON: {"oidc_role": "local_role", ...}
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+    @property
+    def client_secret(self):
+        stored = self._client_secret
+        if stored is None:
+            return None
+        if not stored.startswith(OIDC_CLIENT_SECRET_PREFIX):
+            raise RuntimeError("OIDC client secret is not encrypted")
+
+        token = stored[len(OIDC_CLIENT_SECRET_PREFIX):]
+        try:
+            return _oidc_client_secret_fernet().decrypt(
+                token.encode("ascii")
+            ).decode("utf-8")
+        except (InvalidToken, UnicodeDecodeError) as exc:
+            raise RuntimeError("OIDC client secret cannot be decrypted") from exc
+
+    @client_secret.setter
+    def client_secret(self, value):
+        if not isinstance(value, str) or not value:
+            raise ValueError("OIDC client secret must be a non-empty string")
+
+        token = _oidc_client_secret_fernet().encrypt(
+            value.encode("utf-8")
+        ).decode("ascii")
+        self._client_secret = OIDC_CLIENT_SECRET_PREFIX + token
 
     def to_dict(self, include_secrets=False):
         """Convert to dictionary for API responses"""
@@ -1306,8 +1345,8 @@ class OIDCProviderModel(db.Model):
         if include_secrets:
             data['client_secret'] = self.client_secret
         else:
-            # Mask the secret
-            data['client_secret'] = '••••••••' if self.client_secret else ''
+            # Do not decrypt merely to render the masked admin response.
+            data['client_secret'] = '••••••••' if self._client_secret else ''
         return data
 
     def to_public_dict(self):

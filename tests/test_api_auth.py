@@ -241,3 +241,36 @@ class TestOIDCExchangeSecurity:
         response = client.post('/api/v1/auth/oidc/exchange', json={'code': code})
         assert response.status_code == 400
         assert response.get_json()['code'] == 'INVALID_OIDC_EXCHANGE'
+
+
+class TestOIDCClientSecretEncryption:
+    """Test encryption of OIDC client secrets at rest."""
+
+    def test_client_secret_is_encrypted_at_rest_and_decrypts_for_oidc(self, app):
+        from app.models import OIDCProviderModel, OIDC_CLIENT_SECRET_PREFIX
+
+        plaintext = 'oidc-test-client-secret'
+
+        with app.app_context():
+            provider = OIDCProviderModel(
+                name='test-oidc',
+                display_name='Test OIDC',
+                discovery_url='https://idp.example/.well-known/openid-configuration',
+                client_id='test-client',
+                client_secret=plaintext,
+            )
+
+            assert provider._client_secret.startswith(OIDC_CLIENT_SECRET_PREFIX)
+            assert plaintext not in provider._client_secret
+            assert provider.client_secret == plaintext
+            assert provider.to_dict(include_secrets=False)['client_secret'] == '••••••••'
+
+    def test_unencrypted_legacy_client_secret_is_rejected(self, app):
+        from app.models import OIDCProviderModel
+
+        with app.app_context():
+            provider = OIDCProviderModel()
+            provider._client_secret = 'legacy-plaintext-client-secret'
+
+            with pytest.raises(RuntimeError, match='not encrypted'):
+                _ = provider.client_secret
